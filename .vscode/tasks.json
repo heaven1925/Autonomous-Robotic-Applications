@@ -1,0 +1,33 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Robot: Build & Run (auto COM)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy", "Bypass",
+        "-File", "${workspaceFolder}/run.ps1",
+        "${input:target}"
+      ],
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$msCompile"],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "Robot: List COM ports",
+      "type": "shell",
+      "command": "powershell",
+      "args": ["-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/run.ps1", "-ListPorts"],
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "target",
+      "type": "promptString",
+      "description": "CMake hedefi (exe adı)",
+      "default": "KobukiNativeVS"
+    }
+  ]
+}

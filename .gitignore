@@ -1,0 +1,15 @@
+# CMake build output
+out/
+build/
+
+# Visual Studio / MSVC
+*.obj
+*.pdb
+*.ilk
+*.exe
+*.exp
+*.lib
+.vs/
+
+# Editor
+*.user
