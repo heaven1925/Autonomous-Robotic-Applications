@@ -59,13 +59,41 @@ if ($Target -ieq "stop") {
 }
 
 function Find-VcVars {
-    $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-    if (-not (Test-Path $vswhere)) { throw "vswhere.exe not found. Install Visual Studio Build Tools." }
-    $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-    if (-not $vs) { throw "No Visual Studio installation with C++ tools found." }
-    $vcvars = Join-Path $vs "VC\Auxiliary\Build\vcvars64.bat"
-    if (-not (Test-Path $vcvars)) { throw "vcvars64.bat not found under $vs" }
-    return $vcvars
+    $vswhereCandidates = @(
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe",
+        "${env:ProgramFiles}\Microsoft Visual Studio\Installer\vswhere.exe"
+    ) | Where-Object { $_ -and (Test-Path $_) }
+
+    foreach ($vswhere in $vswhereCandidates) {
+        $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+        if ($vs) {
+            $vcvars = Join-Path $vs "VC\Auxiliary\Build\vcvars64.bat"
+            if (Test-Path $vcvars) { return $vcvars }
+        }
+    }
+
+    $installRoots = @(
+        "${env:ProgramFiles}\Microsoft Visual Studio\2022\Community",
+        "${env:ProgramFiles}\Microsoft Visual Studio\2022\Professional",
+        "${env:ProgramFiles}\Microsoft Visual Studio\2022\Enterprise",
+        "${env:ProgramFiles}\Microsoft Visual Studio\2022\BuildTools",
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\Community",
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\Professional",
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\Enterprise",
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\BuildTools"
+    )
+
+    foreach ($installRoot in $installRoots) {
+        if (-not $installRoot) { continue }
+        $vcvars = Join-Path $installRoot "VC\Auxiliary\Build\vcvars64.bat"
+        if (Test-Path $vcvars) { return $vcvars }
+    }
+
+    if (Get-Command cl.exe -ErrorAction SilentlyContinue) {
+        return $null
+    }
+
+    throw "Could not find vcvars64.bat or cl.exe. Install Visual Studio with Desktop development with C++, or run this from a Developer PowerShell."
 }
 
 function Get-RobotPorts {
@@ -91,20 +119,58 @@ if ($ListPorts) {
     exit 0
 }
 
+function Find-TargetExe {
+    $searchDirs = @(
+        (Join-Path $root "out\build\$preset"),
+        (Join-Path $root "cmake-build-$Config"),
+        (Join-Path $root "cmake-build-debug"),
+        (Join-Path $root "cmake-build-release")
+    ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+
+    foreach ($searchDir in $searchDirs) {
+        $exe = Get-ChildItem $searchDir -Recurse -Filter "$Target.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($exe) { return $exe }
+    }
+
+    return $null
+}
+
 # --- 1. Free the COM port, then build ---
 Stop-RobotApps
 
 if (-not $NoBuild) {
-    $vcvars = Find-VcVars
-    Write-Host ">> Building target '$Target' ($preset)..." -ForegroundColor Cyan
-    cmd /c "`"$vcvars`" >nul && cd /d `"$root`" && cmake --preset $preset && cmake --build --preset $preset --target $Target"
-    if ($LASTEXITCODE -ne 0) { throw "Build failed (exit $LASTEXITCODE)." }
+    try {
+        $vcvars = Find-VcVars
+    }
+    catch {
+        $exe = Find-TargetExe
+        if ($exe) {
+            Write-Host "!! Build tools were not found; using existing executable instead:" -ForegroundColor Yellow
+            Write-Host "   $($exe.FullName)" -ForegroundColor Yellow
+            $NoBuild = $true
+        }
+        else {
+            throw
+        }
+    }
+
+    if (-not $NoBuild) {
+        Write-Host ">> Building target '$Target' ($preset)..." -ForegroundColor Cyan
+        if ($vcvars) {
+            cmd /c "`"$vcvars`" >nul && cd /d `"$root`" && cmake --preset $preset && cmake --build --preset $preset --target $Target"
+        }
+        else {
+            cmake --preset $preset
+            if ($LASTEXITCODE -ne 0) { throw "Configure failed (exit $LASTEXITCODE)." }
+            cmake --build --preset $preset --target $Target
+        }
+        if ($LASTEXITCODE -ne 0) { throw "Build failed (exit $LASTEXITCODE)." }
+    }
 }
 
 # --- 2. Locate the executable ---
-$buildDir = Join-Path $root "out\build\$preset"
-$exe = Get-ChildItem $buildDir -Recurse -Filter "$Target.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-if (-not $exe) { throw "$Target.exe not found under $buildDir. Is the target name correct?" }
+$exe = Find-TargetExe
+if (-not $exe) { throw "$Target.exe not found. Build it in CLion first, or install Visual Studio Build Tools so this script can build it." }
 
 # --- 3. Determine COM port ---
 if (-not $Port) {
