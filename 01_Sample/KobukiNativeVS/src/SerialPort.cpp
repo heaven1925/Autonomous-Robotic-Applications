@@ -75,9 +75,11 @@ void SerialPort::open(const std::string& portName) {
         throw std::runtime_error("SetCommState failed: " + windowsErrorMessage(e));
     }
 
+    // Return as soon as ANY byte is available (max 50 ms wait) -> low
+    // sensor latency, so bumper hits are seen immediately.
     COMMTIMEOUTS timeouts{};
-    timeouts.ReadIntervalTimeout = 20;
-    timeouts.ReadTotalTimeoutMultiplier = 0;
+    timeouts.ReadIntervalTimeout = MAXDWORD;
+    timeouts.ReadTotalTimeoutMultiplier = MAXDWORD;
     timeouts.ReadTotalTimeoutConstant = 50;
     timeouts.WriteTotalTimeoutMultiplier = 0;
     timeouts.WriteTotalTimeoutConstant = 200;

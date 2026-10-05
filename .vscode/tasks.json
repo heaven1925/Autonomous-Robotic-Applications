@@ -26,8 +26,8 @@
     {
       "id": "target",
       "type": "promptString",
-      "description": "CMake hedefi (exe adı)",
-      "default": "KobukiNativeVS"
+      "description": "Hedef: 1, 2, 3, 4 ... (ExampleNN) veya sample",
+      "default": "4"
     }
   ]
 }

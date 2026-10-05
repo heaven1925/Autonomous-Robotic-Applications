@@ -15,6 +15,10 @@ namespace kobuki {
 struct Parameters {
     std::string device_port = "COM3";
     unsigned int command_rate_hz = 20;
+    // Bumper pressed -> forward speed is cut immediately in the driver's
+    // reader thread (no waiting for the application loop). Rotation and
+    // reverse stay allowed.
+    bool stop_on_bump = false;
 };
 
 class Kobuki {

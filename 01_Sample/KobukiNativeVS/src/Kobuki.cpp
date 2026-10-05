@@ -135,10 +135,12 @@ void Kobuki::readerLoop() {
                 Inertia::Data inertiaData;
                 const bool hasCore = KobukiProtocol::parseCoreSensors(payload, coreData);
                 const bool hasInertia = KobukiProtocol::parseInertia(payload, inertiaData);
+                bool bumpEdge = false;
 
                 if (hasCore || hasInertia) {
                     std::lock_guard<std::mutex> lock(dataMutex_);
                     if (hasCore) {
+                        bumpEdge = coreData.bumper != 0 && coreSensors_.bumper == 0;
                         coreSensors_ = coreData;
                         odometry_.update(coreData);
                     }
@@ -150,6 +152,20 @@ void Kobuki::readerLoop() {
                         }
                     }
                     lastRxMilliseconds_.store(nowMilliseconds());
+                }
+
+                // Emergency stop on the bumper press itself: cut forward
+                // speed and send it right now, not on the next command tick.
+                if (bumpEdge && parameters_.stop_on_bump) {
+                    bool wasForward = false;
+                    {
+                        std::lock_guard<std::mutex> lock(commandMutex_);
+                        if (targetLinearVelocity_ > 0.0) {
+                            targetLinearVelocity_ = 0.0;
+                            wasForward = true;
+                        }
+                    }
+                    if (wasForward && enabled_.load()) sendCurrentCommand();
                 }
             }
         }

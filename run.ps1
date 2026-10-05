@@ -6,6 +6,8 @@
 .EXAMPLE
     .\run.ps1 1              # Example01 (square)
     .\run.ps1 2              # Example02 (out-and-back + spin)
+    .\run.ps1 3              # Example03 (waypoints)
+    .\run.ps1 4              # Example04 (waypoints + bumper avoidance)
     .\run.ps1 sample         # interactive teleop demo (KobukiNativeVS)
     .\run.ps1 stop           # just stop whatever is running
     .\run.ps1 2 -Port COM4   # override auto-detected port
@@ -30,18 +32,17 @@ $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
 $preset = "x64-$Config"
 
-# Short aliases -> CMake target names. Add new examples here.
+# Short aliases -> CMake target names. A plain number N maps to ExampleNN
+# (4 -> Example04), so new examples need no change here.
 $aliases = @{
-    "1"      = "Example01"
-    "2"      = "Example02"
-    "3"      = "Example03"
     "sample" = "KobukiNativeVS"
     "teleop" = "KobukiNativeVS"
 }
-if ($aliases.ContainsKey($Target.ToLower())) { $Target = $aliases[$Target.ToLower()] }
+if ($Target -match '^\d+$') { $Target = "Example{0:D2}" -f [int]$Target }
+elseif ($aliases.ContainsKey($Target.ToLower())) { $Target = $aliases[$Target.ToLower()] }
 
 # Every robot app we may have started; killed before each run to free the COM port.
-$knownApps = @("KobukiNativeVS", "Example01", "Example02", "Example03")
+$knownApps = @("KobukiNativeVS", "Example*")
 
 function Stop-RobotApps {
     $stopped = Get-Process -Name $knownApps -ErrorAction SilentlyContinue
