@@ -8,9 +8,15 @@
     .\run.ps1 2              # Example02 (out-and-back + spin)
     .\run.ps1 3              # Example03 (waypoints)
     .\run.ps1 4              # Example04 (waypoints + bumper avoidance)
+    .\run.ps1 6              # FollowTheGap (real HC-SR04 via Arduino + Kobuki)
+    .\run.ps1 7              # Bug0 (3x HC-SR04 via Arduino + Kobuki)
+    .\run.ps1 8              # TangentBug (3x HC-SR04 via Arduino + Kobuki)
+    .\run.ps1 8 -Sim         # TangentBug in its built-in simulator (no hardware needed)
+    .\run.ps1 8 -SensorTest  # TangentBug sensor check: Arduino only, shows what the planner sees
     .\run.ps1 sample         # interactive teleop demo (KobukiNativeVS)
     .\run.ps1 stop           # just stop whatever is running
-    .\run.ps1 2 -Port COM4   # override auto-detected port
+    .\run.ps1 2 -Port COM4   # override auto-detected Kobuki port
+    .\run.ps1 6 -Port COM6 -ArduinoPort COM8   # sensor apps (6/7/8): override both ports
     .\run.ps1 1 -NoBuild     # skip build, run last built exe
 #>
 [CmdletBinding()]
@@ -20,12 +26,20 @@ param(
 
     [string]$Port,
 
+    [string]$ArduinoPort,
+
     [ValidateSet("debug", "release")]
     [string]$Config = "debug",
 
     [switch]$NoBuild,
 
-    [switch]$ListPorts
+    [switch]$ListPorts,
+
+    # Run the app's built-in simulator instead of real hardware (TangentBug only).
+    [switch]$Sim,
+
+    # Sensor check with the Arduino only, no Kobuki (TangentBug only).
+    [switch]$SensorTest
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,16 +47,41 @@ $root = $PSScriptRoot
 $preset = "x64-$Config"
 
 # Short aliases -> CMake target names. A plain number N maps to ExampleNN
-# (4 -> Example04), so new examples need no change here.
-$aliases = @{
-    "sample" = "KobukiNativeVS"
-    "teleop" = "KobukiNativeVS"
+# (4 -> Example04), so new examples need no change here. Targets that don't
+# follow that pattern (e.g. FollowTheGap) get an explicit numeric override.
+$numericOverrides = @{
+    "6" = "FollowTheGap"
+    "7" = "Bug0"
+    "8" = "TangentBug"
 }
-if ($Target -match '^\d+$') { $Target = "Example{0:D2}" -f [int]$Target }
+$aliases = @{
+    "sample"       = "KobukiNativeVS"
+    "teleop"       = "KobukiNativeVS"
+    "gap"          = "FollowTheGap"
+    "followthegap" = "FollowTheGap"
+    "bug0"         = "Bug0"
+    "tangent"      = "TangentBug"
+    "tangentbug"   = "TangentBug"
+}
+if ($numericOverrides.ContainsKey($Target)) { $Target = $numericOverrides[$Target] }
+elseif ($Target -match '^\d+$') { $Target = "Example{0:D2}" -f [int]$Target }
 elseif ($aliases.ContainsKey($Target.ToLower())) { $Target = $aliases[$Target.ToLower()] }
 
+# Targets that take a second argument: the Arduino sensor COM port.
+$sensorApps = @("FollowTheGap", "Bug0", "TangentBug")
+$needsArduino = $sensorApps -contains $Target
+
+# Targets with a built-in simulator (run as "<exe> --sim", no COM ports).
+$simApps = @("TangentBug")
+if ($Sim -and -not ($simApps -contains $Target)) {
+    throw "-Sim is only supported for: $($simApps -join ', ')"
+}
+if ($SensorTest -and -not ($simApps -contains $Target)) {
+    throw "-SensorTest is only supported for: $($simApps -join ', ')"
+}
+
 # Every robot app we may have started; killed before each run to free the COM port.
-$knownApps = @("KobukiNativeVS", "Example*")
+$knownApps = @("KobukiNativeVS", "Example*", "FollowTheGap", "Bug0", "TangentBug")
 
 function Stop-RobotApps {
     $stopped = Get-Process -Name $knownApps -ErrorAction SilentlyContinue
@@ -98,15 +137,27 @@ function Find-VcVars {
 }
 
 function Get-RobotPorts {
-    # Prefer FTDI / USB serial adapters (Kobuki uses an FTDI chip).
+    # Kobuki's native adapter is FTDI (VID_0403). Arduino Uno clones (and
+    # the sensor board this project uses) are almost always CH340
+    # (VID_1A86) - keep the two apart so auto-detect never mixes them up
+    # when both are plugged in at once (FollowTheGap needs both).
     $pnp = Get-CimInstance Win32_PnPEntity -Filter "Name LIKE '%(COM%'" -ErrorAction SilentlyContinue
     $all = @()
     foreach ($d in $pnp) {
         if ($d.Name -match '\((COM\d+)\)') {
+            # Capture the port number BEFORE any other -match call below -
+            # every -match overwrites $Matches, so this must come first.
+            $portNumber = $Matches[1]
+            $isFtdi = ($d.Name -match 'FTDI|FT232' -or $d.DeviceID -match 'FTDIBUS|VID_0403')
+            # "IsCh340" = the Arduino sensor board: CH340/CH341 clones, or a genuine
+            # Arduino (VID_2341 / VID_2A03, or "Arduino" in the device name).
+            $isCh340 = ($d.Name -match 'CH340|CH341|Arduino' -or $d.DeviceID -match 'VID_1A86|VID_2341|VID_2A03')
             $all += [pscustomobject]@{
-                Port = $Matches[1]
+                Port = $portNumber
                 Name = $d.Name
-                IsUsbSerial = ($d.Name -match 'FTDI|FT232|USB Serial|USB-SERIAL|CP210|CH340' -or $d.DeviceID -match 'FTDIBUS|VID_0403')
+                IsFtdi = $isFtdi
+                IsCh340 = $isCh340
+                IsUsbSerial = ($isFtdi -or $isCh340 -or $d.Name -match 'USB Serial|USB-SERIAL|CP210')
             }
         }
     }
@@ -116,7 +167,7 @@ function Get-RobotPorts {
 if ($ListPorts) {
     $ports = Get-RobotPorts
     if (-not $ports) { Write-Host "No COM ports found."; exit 0 }
-    $ports | Format-Table Port, Name, IsUsbSerial -AutoSize
+    $ports | Format-Table Port, Name, IsFtdi, IsCh340 -AutoSize
     exit 0
 }
 
@@ -173,11 +224,37 @@ if (-not $NoBuild) {
 $exe = Find-TargetExe
 if (-not $exe) { throw "$Target.exe not found. Build it in CLion first, or install Visual Studio Build Tools so this script can build it." }
 
-# --- 3. Determine COM port ---
+# --- 3. Determine COM port(s) ---
+if ($Sim) {
+    Write-Host ">> Running: $($exe.FullName) --sim`n" -ForegroundColor Cyan
+    & $exe.FullName --sim
+    exit $LASTEXITCODE
+}
+
+if ($SensorTest) {
+    if (-not $ArduinoPort) {
+        $ch340 = @(Get-RobotPorts | Where-Object IsCh340)
+        if ($ch340.Count -lt 1) {
+            Write-Host "!! Could not auto-detect the Arduino sensor COM port; use -ArduinoPort COMx." -ForegroundColor Red
+            exit 1
+        }
+        $ArduinoPort = $ch340[0].Port
+        Write-Host ">> Auto-detected Arduino port: $ArduinoPort ($($ch340[0].Name))" -ForegroundColor Green
+    }
+    Write-Host ">> Running: $($exe.FullName) --sensors $ArduinoPort`n" -ForegroundColor Cyan
+    & $exe.FullName --sensors $ArduinoPort
+    exit $LASTEXITCODE
+}
+
 if (-not $Port) {
     $ports = Get-RobotPorts
+    $ftdi = @($ports | Where-Object IsFtdi)
     $usb = @($ports | Where-Object IsUsbSerial)
-    if ($usb.Count -ge 1) {
+    if ($ftdi.Count -ge 1) {
+        $Port = $ftdi[0].Port
+        Write-Host ">> Auto-detected robot port: $Port ($($ftdi[0].Name))" -ForegroundColor Green
+    }
+    elseif ($usb.Count -ge 1) {
         $Port = $usb[0].Port
         Write-Host ">> Auto-detected robot port: $Port ($($usb[0].Name))" -ForegroundColor Green
         if ($usb.Count -gt 1) { Write-Host "   (multiple USB serial ports found; use -Port to override)" -ForegroundColor Yellow }
@@ -190,11 +267,33 @@ if (-not $Port) {
         Write-Host "!! Could not auto-detect the robot COM port." -ForegroundColor Red
         if ($ports) { $ports | Format-Table Port, Name -AutoSize }
         Write-Host "   Connect the robot or specify one, e.g.:  .\run.ps1 $Target -Port COM4"
+        if ($simApps -contains $Target) { Write-Host "   No hardware? Try the simulator:       .\run.ps1 $Target -Sim" }
+        exit 1
+    }
+}
+
+if ($needsArduino -and -not $ArduinoPort) {
+    $ports = Get-RobotPorts
+    $ch340 = @($ports | Where-Object { $_.IsCh340 -and $_.Port -ne $Port })
+    if ($ch340.Count -ge 1) {
+        $ArduinoPort = $ch340[0].Port
+        Write-Host ">> Auto-detected Arduino port: $ArduinoPort ($($ch340[0].Name))" -ForegroundColor Green
+    }
+    else {
+        Write-Host "!! Could not auto-detect the Arduino sensor COM port." -ForegroundColor Red
+        if ($ports) { $ports | Format-Table Port, Name, IsFtdi, IsCh340 -AutoSize }
+        Write-Host "   Connect the Arduino or specify one, e.g.:  .\run.ps1 $Target -ArduinoPort COM8"
         exit 1
     }
 }
 
 # --- 4. Run ---
-Write-Host ">> Running: $($exe.FullName) $Port`n" -ForegroundColor Cyan
-& $exe.FullName $Port
+if ($needsArduino) {
+    Write-Host ">> Running: $($exe.FullName) $Port $ArduinoPort`n" -ForegroundColor Cyan
+    & $exe.FullName $Port $ArduinoPort
+}
+else {
+    Write-Host ">> Running: $($exe.FullName) $Port`n" -ForegroundColor Cyan
+    & $exe.FullName $Port
+}
 exit $LASTEXITCODE

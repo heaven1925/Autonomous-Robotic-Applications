@@ -13,3 +13,6 @@ build/
 
 # Editor
 *.user
+
+# Locally downloaded tools (e.g. arduino-cli, fetched via winget/zip fallback)
+.tools/
