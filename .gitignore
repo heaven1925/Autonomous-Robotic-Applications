@@ -16,3 +16,6 @@ build/
 
 # Locally downloaded tools (e.g. arduino-cli, fetched via winget/zip fallback)
 .tools/
+
+# Maps saved by the Mapping example
+09_Mapping/output/

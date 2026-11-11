@@ -13,10 +13,13 @@
     .\run.ps1 8              # TangentBug (3x HC-SR04 via Arduino + Kobuki)
     .\run.ps1 8 -Sim         # TangentBug in its built-in simulator (no hardware needed)
     .\run.ps1 8 -SensorTest  # TangentBug sensor check: Arduino only, shows what the planner sees
+    .\run.ps1 9              # Mapping: autonomous occupancy-grid mapper (3x HC-SR04 via Arduino + Kobuki)
+    .\run.ps1 9 -Sim         # Mapping in its built-in simulator (no hardware needed)
+    .\run.ps1 9 -Manual      # Mapping while you drive the robot from the keyboard (also with -Sim)
     .\run.ps1 sample         # interactive teleop demo (KobukiNativeVS)
     .\run.ps1 stop           # just stop whatever is running
     .\run.ps1 2 -Port COM4   # override auto-detected Kobuki port
-    .\run.ps1 6 -Port COM6 -ArduinoPort COM8   # sensor apps (6/7/8): override both ports
+    .\run.ps1 6 -Port COM6 -ArduinoPort COM8   # sensor apps (6/7/8/9): override both ports
     .\run.ps1 1 -NoBuild     # skip build, run last built exe
 #>
 [CmdletBinding()]
@@ -35,11 +38,14 @@ param(
 
     [switch]$ListPorts,
 
-    # Run the app's built-in simulator instead of real hardware (TangentBug only).
+    # Run the app's built-in simulator instead of real hardware (TangentBug, Mapping).
     [switch]$Sim,
 
     # Sensor check with the Arduino only, no Kobuki (TangentBug only).
-    [switch]$SensorTest
+    [switch]$SensorTest,
+
+    # Drive the robot from the keyboard while the map is built (Mapping only).
+    [switch]$Manual
 )
 
 $ErrorActionPreference = "Stop"
@@ -53,6 +59,7 @@ $numericOverrides = @{
     "6" = "FollowTheGap"
     "7" = "Bug0"
     "8" = "TangentBug"
+    "9" = "Mapping"
 }
 $aliases = @{
     "sample"       = "KobukiNativeVS"
@@ -62,26 +69,36 @@ $aliases = @{
     "bug0"         = "Bug0"
     "tangent"      = "TangentBug"
     "tangentbug"   = "TangentBug"
+    "map"          = "Mapping"
+    "mapping"      = "Mapping"
 }
 if ($numericOverrides.ContainsKey($Target)) { $Target = $numericOverrides[$Target] }
 elseif ($Target -match '^\d+$') { $Target = "Example{0:D2}" -f [int]$Target }
 elseif ($aliases.ContainsKey($Target.ToLower())) { $Target = $aliases[$Target.ToLower()] }
 
 # Targets that take a second argument: the Arduino sensor COM port.
-$sensorApps = @("FollowTheGap", "Bug0", "TangentBug")
+$sensorApps = @("FollowTheGap", "Bug0", "TangentBug", "Mapping")
 $needsArduino = $sensorApps -contains $Target
 
 # Targets with a built-in simulator (run as "<exe> --sim", no COM ports).
-$simApps = @("TangentBug")
+$simApps = @("TangentBug", "Mapping")
 if ($Sim -and -not ($simApps -contains $Target)) {
     throw "-Sim is only supported for: $($simApps -join ', ')"
 }
-if ($SensorTest -and -not ($simApps -contains $Target)) {
-    throw "-SensorTest is only supported for: $($simApps -join ', ')"
+# Targets with an Arduino-only sensor check ("<exe> --sensors <port>").
+$sensorTestApps = @("TangentBug")
+if ($SensorTest -and -not ($sensorTestApps -contains $Target)) {
+    throw "-SensorTest is only supported for: $($sensorTestApps -join ', ')"
+}
+# Extra arguments passed through to the app.
+$appArgs = @()
+if ($Manual) {
+    if ($Target -ne "Mapping") { throw "-Manual is only supported for: Mapping" }
+    $appArgs += "--manual"
 }
 
 # Every robot app we may have started; killed before each run to free the COM port.
-$knownApps = @("KobukiNativeVS", "Example*", "FollowTheGap", "Bug0", "TangentBug")
+$knownApps = @("KobukiNativeVS", "Example*", "FollowTheGap", "Bug0", "TangentBug", "Mapping")
 
 function Stop-RobotApps {
     $stopped = Get-Process -Name $knownApps -ErrorAction SilentlyContinue
@@ -226,8 +243,8 @@ if (-not $exe) { throw "$Target.exe not found. Build it in CLion first, or insta
 
 # --- 3. Determine COM port(s) ---
 if ($Sim) {
-    Write-Host ">> Running: $($exe.FullName) --sim`n" -ForegroundColor Cyan
-    & $exe.FullName --sim
+    Write-Host ">> Running: $($exe.FullName) --sim $appArgs`n" -ForegroundColor Cyan
+    & $exe.FullName --sim @appArgs
     exit $LASTEXITCODE
 }
 
@@ -289,8 +306,8 @@ if ($needsArduino -and -not $ArduinoPort) {
 
 # --- 4. Run ---
 if ($needsArduino) {
-    Write-Host ">> Running: $($exe.FullName) $Port $ArduinoPort`n" -ForegroundColor Cyan
-    & $exe.FullName $Port $ArduinoPort
+    Write-Host ">> Running: $($exe.FullName) $Port $ArduinoPort $appArgs`n" -ForegroundColor Cyan
+    & $exe.FullName $Port $ArduinoPort @appArgs
 }
 else {
     Write-Host ">> Running: $($exe.FullName) $Port`n" -ForegroundColor Cyan
