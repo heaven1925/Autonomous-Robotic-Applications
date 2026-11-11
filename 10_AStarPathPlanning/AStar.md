@@ -112,9 +112,7 @@ Gerçek robotta konum Kobuki'nin jiroskopundan (yön) ve tekerlek enkoderlerinde
 |---|---|
 | ![](docs/assignment_run.png) | ![](docs/assignment_replan_run.png) |
 
-| example_10x10 | example_20x10 `--smooth` |
-|---|---|
-| ![](docs/example_10x10_run.png) | ![](docs/example_20x10_smooth_plan.png) |
+Diğer haritaların resimlerini üretmek için: `.\run.ps1 10 -PlanOnly -Map 10_AStarPathPlanning\maps\example_20x10.txt --smooth`. Sonuç `output/` klasörüne kaydedilir.
 
 Resimlerde:
 - koyu kırmızı = engel;
