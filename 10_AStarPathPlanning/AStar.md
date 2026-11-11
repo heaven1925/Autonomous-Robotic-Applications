@@ -1,72 +1,62 @@
-# Örnek 10: A* ile yol planlama (Kobuki)
+# Örnek 10: A* ile yol planlama (Kobuki, laboratuvar labirenti)
 
-Robot, bir `.txt` dosyasında 0/1 hücrelerle verilen haritada başlangıçtan hedefe **A\*** ile en kısa yolu bulur. Robotun yarıçapı (15 cm) kadar pay bırakıldığı için engellere değmez. Ardından Kobuki bu yolu sürer. Donanım olmadan da çalışır: yerleşik simülatör aynı haritayı kullanır.
+Robot, laboratuvar zeminindeki 8 × 11 hücrelik labirentte başlangıçtan hedefe **A\*** ile en kısa yolu bulur. Robot yarıçapı (15 cm) kadar pay bırakıldığı için engellere değmez. Ardından Kobuki bu yolu sürer.
+
+- Labirent [maps/lab.txt](maps/lab.txt) dosyasında 0/1 olarak tanımlıdır.
+- Sensör kartı (HC-SR04 / Arduino) kullanılmaz. Robot yalnızca haritaya, jiroskopa ve tekerlek enkoderlerine göre gider.
+- Donanım olmadan da çalışır: yerleşik simülatör aynı haritayı kullanır.
 
 Kullanım: [USER_GUIDE.md](USER_GUIDE.md).
 
 ## 1. Harita dosyası
 
 ```text
-# yorum satırı                 (% ve // da yorum)
-cell 0.20                      hücre boyu, metre (varsayılan 0.20)
-goal  9 2                      hedef hücresi: sütun satır
-heading 0                      robotun ilk yönü, derece (0 = sağa, 90 = yukarı)
-* 0 0 0 0 0 0 0 0 0            * = başlangıç (robotun durduğu hücre), 0 = boş, 1 = engel
-0 0 0 1 1 0 0 0 0 0            hücreler boşlukla, virgülle ya da bitişik yazılabilir
-0 0 0 1 1 0 0 0 0 0
-...
+name lab
+cell 0.43            # hücre kenarı, metre (zeminde ölçülmeli)
+coords row-col 1     # hücreler (satır, sütun) yazılır, 1'den sayılır
+border wall          # alanın dört yanı kapalı
+heading 270          # robotun ilk yönü: 270 = aşağı (11. satıra doğru)
+1 0 0 0 0 0 * 1      # satır 1
+1 0 0 0 0 0 1 1
+1 0 0 0 1 1 1 1
+1 0 0 0 0 0 1 1
+1 1 1 0 0 0 0 1
+1 0 0 0 0 0 0 1
+1 0 0 0 1 1 0 1
+1 0 0 0 1 0 0 1
+1 0 0 0 0 0 / 1      # satır 9
+1 1 1 1 1 1 1 1
+1 1 1 1 1 1 1 1      # satır 11
 ```
 
-- **Koordinat (sütun, satır):** sütun soldan, satır **üstten** sayılır; dosyanın ilk ızgara satırı 0. satırdır. `(18,5)` = 18. sütun, 5. satır.
-- İsteğe bağlı iki satır daha var:
-  - `coords row-col 1`: hücreler (satır, sütun) sırasında ve 1'den sayılarak yazılır, zemindeki numaralı ızgara gibi. Varsayılan `coords col-row 0`'dır. Dosyadaki `start`/`goal`, komut satırındaki `--start`/`--goal`/`--block`, ekrandaki tüm mesajlar ve resimdeki numaralar bu yazımı kullanır.
-  - `border wall`: harita kenarı duvardır (`--walled` ile aynı). Varsayılan `border open`'dır.
-  - Laboratuvar labirenti ([maps/lab.txt](maps/lab.txt)) ikisini de kullanır: 8×11 hücre, başlangıç (1,7).
-- Başlangıç ızgarada `*` ile gösterilir; o hücre boştur. Ayrıca `start 0 0` satırı ya da `S` harfi de kabul edilir. Hedef `goal` satırıyla ya da ızgarada `G` ile verilir.
-- 09 Mapping'in kaydettiği `_grid.txt` de aynı biçimdedir: başlangıç `*`.
-- Komut satırındaki `--start`, `--goal`, `--heading`, `--cell` dosyadaki değerleri ezer.
-- Hatalı dosyada program satır numarasıyla birlikte hatayı söyler (ör. `line 4: this row has 3 cells, the first row has 4`).
+| İşaret | Anlamı |
+|---|---|
+| `0` | boş |
+| `1` | engel |
+| `*` | robotun başlangıç hücresi: **(1,7)** |
+| `/` | hedef hücresi: **(9,7)** |
 
-Metre cinsinden harita çerçevesinde orijin haritanın **sol-alt köşesi**, +x sağa, +y yukarı doğrudur. (c, r) hücresinin merkezi `((c+0.5)·cell, (satır_sayısı − r − 0.5)·cell)` noktasıdır.
-
-### Hazır haritalar ([maps/](maps/))
-
-| Dosya | Boyut | Ne gösterir |
-|---|---|---|
-| `lab.txt` | 8×11 hücre, 43 cm (tahmini) | **Laboratuvar labirenti (varsayılan harita)**: başlangıç (1,7), (satır, sütun) 1'den, kenarlar duvar |
-| `first_test.txt` | 6×4 (1,2 × 0,8 m) | Gerçek robotla ilk deneme, engelsiz |
-| `assignment.txt` | 19×19 (3,8 × 3,8 m) | Ödev görselindeki plan |
-| `example_10x10.txt` | 10×10 (2 × 2 m) | Hocanın örneği: 40 cm'lik kutu, robot (0,0) |
-| `example_20x10.txt` | 20×10 (4 × 2 m) | Hocanın (0,0) → (18,5) örneği, üç engelle |
-
-### Ödev görselinin dönüştürülmesi
-
-![Ödev görseli](docs/assignment_figure.png)
-
-Görseldeki kırmızı duvarlar karelerin içinde değil, ızgara **çizgilerinin üzerindedir**. 0/1 hücre haritasında bir çizgi ancak bir hücre sırasıyla gösterilebilir. Bu yüzden her çizgi bir hücre, her karenin içi bir hücre sayılarak 9 kare **2·9+1 = 19** hücreye açıldı. Görseldeki k. çizgi hücre 2k'ye denk gelir; örneğin sol duvar 2. çizgide, yani 4. sütundadır.
-
-Kırmızı nokta (sağ duvarın alt ucunun hemen sağ-altı) **(15,15)** hücresine düşer. Bu hücrenin merkezi duvar köşesine yalnızca **14,1 cm** uzaktadır, yani 15 cm'lik paydan yakındır. Program bunu bildirir ve hedefi başlangıçtan ulaşılabilen en yakın güvenli hücreye, **(16,15)**'e kaydırır. `--strict` verilirse hedefi kaydırmaz, durur.
+- **Koordinatlar zemindeki numaralar gibidir:** (satır, sütun), 1'den başlar. Satır 1 kapıya yakın üst kenar, sütun 8 sağdaki uzun beyaz panel. Ekrandaki mesajlar, resimdeki numaralar ve `-Goal`, `-Start`, `--block` de bu yazımı kullanır.
+- **Engel ya da hedef değişirse** yalnızca ızgaradaki 0 / 1 / `*` / `/` değerlerini değiştirin. Hücreler boşlukla, virgülle ya da bitişik yazılabilir; `{0,1,0}` yazımı da olur.
+- `-Goal satır,sütun` (komut satırı) dosyadaki `/`'ın, `-Start` de `*`'ın yerine geçer.
+- Hatalı dosyada program satır numarasıyla birlikte hatayı söyler. Örnekler: `line 22: this row has 7 cells, the first row has 8`, `more than one goal (/) in the grid`.
+- 09 Mapping'in kaydettiği `_grid.txt` da aynı biçimdedir ve buraya verilebilir.
 
 ## 2. Robot yarıçapı kadar pay: konfigürasyon uzayı
 
-Robot bir nokta değil, 15 cm yarıçaplı bir dairedir. Klasik çözüm engelleri robot yarıçapı kadar **şişirmek** ve robotu nokta saymaktır:
+Robot bir nokta değil, 15 cm yarıçaplı bir dairedir. Bu yüzden engeller robot yarıçapı kadar **şişirilir** ve robot bir nokta gibi planlanır:
 
-> Bir boş hücrenin **merkezi**, herhangi bir engel hücresinin (kare) en yakın noktasına 15 cm'den yakınsa o hücre "şişirilmiş" sayılır. Robotun merkezi oraya giremez.
+> Bir boş hücrenin **merkezi**, herhangi bir engel hücresinin (kare) en yakın noktasına yarıçaptan yakınsa o hücre yasak sayılır. Robotun merkezi oraya giremez.
 
-Uzaklık hücre merkezleri arasında değil, merkezden engel **karesinin kenarına** ölçülür. 20 cm'lik hücrelerde bu şöyle sonuç verir:
+Labirentte hücre 43 cm, yani bir hücre merkezinden komşu engelin kenarına uzaklık 21,5 cm, çapraz köşeye 30 cm. Bu 15 cm'den büyük olduğu için hiçbir boş hücre yasaklanmıyor; Kobuki'nin gerçek yarıçapı olan yaklaşık 17,5 cm için de durum aynı. Gövde (35 cm) hücreye (43 cm) sığar ve her yanda yaklaşık 4 cm pay kalır.
 
-| Engelden konum | Merkez → engel kenarı | 15 cm pay |
-|---|---|---|
-| Hemen yanı | 10 cm | yasak |
-| Çaprazı | 14,1 cm | yasak |
-| 2 hücre ötesi | 30 cm | serbest |
-| (2,1) ötesi | 31,6 cm | serbest |
+Planlayıcı yine de her yolu kontrol eder: rota 1 cm aralıkla örneklenir ve robot merkezinin engellere en yakın mesafesi (`min clearance`) yazılır. Labirentte bu değer 21,5 cm'dir.
 
-Yani 15 cm'lik pay, engelin çevresindeki 1 hücrelik halkayı (köşeler dahil) kapatır. Konsolda bunlar `+`, resimde açık kırmızı gösterilir. Bunun önemli bir sonucu var: iki duvar arasındaki **tek karelik koridorlar** (görselde 40 cm, aradaki boşluk 20 cm) 30 cm çaplı robota kapalıdır; A* bunlardan geçmez.
-
-- `--radius 0.18`: Kobuki'nin gerçek yarıçapı yaklaşık 17,5 cm'dir. 20 cm hücrede sonuç değişmez, çünkü 30 cm'ye kadar her yarıçap aynı halkayı verir.
-- `--margin 0.05`: odometri hatasına karşı ek güvenlik payı.
-- Harita kenarı varsayılan olarak duvar **sayılmaz**, çünkü hocanın örneğinde robot (0,0) köşe hücresinde duruyor ve merkezi kenara 10 cm uzakta. Gerçek alan duvarla çevriliyse `--walled` verin. O zaman kenar da şişirilir ve robot kenardan 15 cm uzak durur.
+Ayarlar:
+- `border wall`: harita kenarı da duvar sayılır.
+- `--radius 0.18`: Kobuki'nin gerçek yarıçapıyla planlar.
+- `--margin 0.05`: odometri hatasına karşı ek pay ekler.
+- Hücre küçük olsaydı (örneğin 20 cm), engelin çevresindeki hücreler yasaklanırdı. Konsolda bunlar `+`, resimde açık kırmızı görünür.
 
 ## 3. A*
 
@@ -75,69 +65,73 @@ Kod: [AStarPlanner.h](../01_Sample/KobukiNativeVS/include/AStarPlanner.h) (`asta
 - **Düğüm:** hücre. **Komşular:** 8 yön (`--4` ile yalnızca 4 düz yön).
 - **g:** başlangıçtan gelinen yol uzunluğu. Düz adım 1 hücre, çapraz adım √2 hücre.
 - **h:** hedefe tahmini mesafe. 8-komşulukta *octile* `max(dx,dy) + (√2−1)·min(dx,dy)`, 4-komşulukta Manhattan. İkisi de kabul edilebilir ve tutarlı olduğu için A* en kısa yolu bulur ve her hücreyi bir kez kapatır.
-- **f = g + h** en küçük olan açık hücre genişletilir. Eşit f'de g'si büyük olan, yani hedefe yakın olan önce gelir; bu, A*'ın eşit f'li düzlükleri boşuna taramasını önler.
-- **Köşe kesme yok:** çapraz adımda yanındaki iki hücre de serbest olmalı.
-- Açık liste `priority_queue` ile tutulur. Daha kısa yol bulununca yeni kayıt eklenir, eskisi çekildiğinde atlanır (lazy deletion).
-- Başlangıç şişirilmiş bölgedeyse (örneğin çarpmadan sonra) robot zaten oradadır. Bu durumda A* oradan **çıkmasına** izin verir; şişirilmiş hücreye geri girmek yasaktır.
-- Karşılaştırma için aynı arama h = 0 ile (Dijkstra) de çalıştırılır ve genişletilen hücre sayıları yazılır.
+- **f = g + h** en küçük olan açık hücre genişletilir. Eşit f'de hedefe yakın olan (g'si büyük olan) önce gelir.
+- **Köşe kesme yok:** çapraz adımda yanındaki iki hücre de boş olmalı. Örneğin (1,7)'den (2,6)'ya çapraz gidilemez, çünkü (2,7) engeldir.
+- Açık liste `priority_queue` ile tutulur. Daha kısa yol bulununca yeni kayıt eklenir, eskisi çekildiğinde atlanır.
+- Karşılaştırma için aynı arama h = 0 ile (Dijkstra) de yapılır ve iki algoritmanın açtığı hücre sayıları yazılır.
 
-Yol, yön değiştirdiği **köşe hücrelerine** indirgenir; robot iki köşe arasını düz gider. `--smooth` verilirse yol "görüş hattı" ile kısaltılır: her noktadan, arada en az r + 5 cm boşluk kalarak düz gidilebilen en uzak sonraki noktaya atlanır. Böylece bacak sayısı azalır, açılar serbestleşir.
-
-Her planın sonunda rota 1 cm aralıkla örneklenir ve robot merkezinin engellere en yakın mesafesi (`min clearance`) hesaplanıp yazılır. Bu değer yarıçaptan küçük olamaz.
+Yol, yön değiştirdiği **köşe hücrelerine** indirgenir; robot iki köşe arasını düz gider. `--smooth` verilirse yol "görüş hattı" ile kısaltılır ve bacak sayısı azalır.
 
 ## 4. Sürüş
 
-Kod: [src/PathFollower.h](src/PathFollower.h).
+Kod: [src/PathFollower.h](src/PathFollower.h). Konum Kobuki'nin jiroskopundan (yön) ve tekerlek enkoderlerinden (mesafe) gelir; bunlar haritadaki başlangıç pozuna göre harita çerçevesine çevrilir.
 
-1. **Dön:** robot bacağın sonuna dönük olana kadar yerinde döner (tolerans 3°, en düşük açısal hız 0,15 rad/s).
-2. **Git:** düz bacakta ilerler. Yön ayar noktası, bacak yönüne yanal hata kadar düzeltme eklenerek bulunur (`atan(e / 0,20 m)`), böylece robot çizgiye geri döner. Hız 0,15 m/s'dir, sona yaklaştıkça düşer. Noktaya 1 cm kala bacak biter.
+1. **Dön:** robot sıradaki köşeye dönük olana kadar yerinde döner (tolerans 3°).
+2. **Git:** o köşeye düz gider. Çizgiden saparsa yönünü düzeltip çizgiye geri döner. Hız 0,15 m/s'dir, köşeye yaklaşınca düşer; 1 cm kala bir sonraki bacağa geçer.
 
-Gerçek robotta konum Kobuki'nin jiroskopundan (yön) ve tekerlek enkoderlerinden (mesafe) gelir; bunlar haritadaki başlangıç pozuna göre harita çerçevesine çevrilir.
-
-**Tampon:** haritada olmayan bir engele çarpınca robot durur ve değdiği hücreyi haritaya engel olarak ekler. Sonra 10 cm geri çekilir ve bulunduğu hücreden **yeniden A\*** çalıştırır. En fazla 10 kez yeniden planlar. Simülatörde `--block c,r` bu durumu dener: hücre gerçekte vardır ama planlayıcının haritasında yoktur.
+**Tampon:** haritada olmayan bir şeye çarparsa robot şunları yapar:
+1. Durur.
+2. Çarptığı hücreyi haritaya engel olarak ekler.
+3. 10 cm geri çekilir.
+4. Bulunduğu hücreden **A\*'ı yeniden çalıştırır** (en fazla 10 kez).
 
 **Güvenlik:** uçurum sensörü, `Q`, Ctrl+C ya da pencereyi kapatmak robotu durdurur. Ayrıca planlanan sürenin yaklaşık 20 katında süre sınırı vardır.
 
-## 5. Sonuçlar (simülatör, robot yarıçapı 15 cm)
+## 5. Sonuçlar (simülatör)
 
-| Harita | A* yolu | Genişletilen hücre (A* / Dijkstra) | Sürüş | Hedef hatası |
+| Senaryo | A* yolu | Açılan hücre (A* / Dijkstra) | Sürüş | Hedef hatası |
 |---|---|---|---|---|
-| assignment (0,0) → (16,15)\* | 32 hücre, 6,20 m, 2 bacak | 101 / 197 | 48,6 s, çarpma yok | 1,0 cm |
-| assignment + `--block 10,0` | çarpma → yeniden plan: 30 hücre, 5,80 m | 101 / 197 | 83,1 s, 1 çarpma, 1 yeniden plan | 1,0 cm |
-| example_10x10 (0,0) → (9,2) | 13 hücre, 2,65 m, 5 bacak | 17 / 75 | 38,2 s, çarpma yok | 1,0 cm |
-| example_20x10 (0,0) → (18,5) | 31 hücre, 6,25 m, 10 bacak | 95 / 108 | 84,8 s, çarpma yok | 1,0 cm |
-| example_20x10 `--smooth` | 7 bacak, 5,89 m | 95 / 108 | – | – |
+| (1,7) → (9,7), 8 komşu | 12 hücre, 5,26 m, 7 bacak | 17 / 42 | 65,5 s, çarpma yok | 1,0 cm |
+| aynı, `--4` | 15 hücre, 6,02 m, 8 bacak | – | – | – |
+| haritada olmayan engel `--block 6,6` | çarptı, (5,5)'ten yeniden planladı: 7 hücre, 2,58 m | – | 67,0 s, 1 çarpma, 1 yeniden plan | 1,0 cm |
 
-\* (15,15) istendi, güvenli olmadığı için (16,15) kullanıldı.
+```text
+      1 2 3 4 5 6 7 8
+   1  # . . . . o * #        *  başlangıç (1,7)
+   2  # . . o o . # #        /  hedef (9,7)
+   3  # . . o # # # #        o  A* yolu
+   4  # . . o . . # #        #  engel
+   5  # # # . o . . #
+   6  # . . . . o o #
+   7  # . . . # # o #
+   8  # . . . # . o #
+   9  # . . . . . / #
+  10  # # # # # # # #
+  11  # # # # # # # #
+```
 
-- `--smooth` dışındaki tüm yollarda robot merkezi engellere en az **30 cm** uzak kalır; gereken 15 cm'dir. `--smooth` ile bu 22,4 cm'ye iner, yine de gerekenin üstündedir.
-- Planlama süresi 0,1 ms'nin altındadır.
-- Simülatörde tüm haritalar uyarısız derlendi ve hedefe ulaşıldı. Gerçek robotta henüz denenmedi.
+- Robot merkezi engellere en az 21,5 cm uzak kalıyor; gereken 15 cm.
+- Planlama süresi 0,1 ms'nin altında.
+- Labirentteki tüm boş hücrelere yol bulunuyor; engel üstündeki ya da harita dışındaki hedef reddediliyor.
+- Gerçek robotta henüz denenmedi.
 
-| Ödev haritası | Haritada olmayan engel ile |
-|---|---|
-| ![](docs/assignment_run.png) | ![](docs/assignment_replan_run.png) |
-
-Diğer haritaların resimlerini üretmek için: `.\run.ps1 10 -PlanOnly -Map 10_AStarPathPlanning\maps\example_20x10.txt --smooth`. Sonuç `output/` klasörüne kaydedilir.
-
-Resimlerde:
+Resimde:
 - koyu kırmızı = engel;
-- açık kırmızı = robot merkezinin giremeyeceği hücreler;
-- açık mavi = A*'ın genişlettiği hücreler;
+- açık mavi = A*'ın açtığı hücreler;
 - mavi çizgi = A* yolu;
-- yeşil çerçeve = robotun gövdesinin süpürdüğü alan (yolun iki yanında yarıçap kadar);
-- koyu yeşil çizgi = robotun gerçekte gittiği yol.
+- yeşil çerçeve = robot gövdesinin kapladığı alan;
+- koyu yeşil = robotun gittiği yol.
 
-Metin çıktısı örneği: [docs/assignment_plan.txt](docs/assignment_plan.txt).
+Resim her çalıştırmada `output/` klasörüne kaydedilir.
 
 ## 6. Dosyalar
 
 | Dosya | İçerik |
 |---|---|
+| [maps/lab.txt](maps/lab.txt) | Laboratuvar labirenti |
 | [01_Sample/.../AStarPlanner.h](../01_Sample/KobukiNativeVS/include/AStarPlanner.h) | Harita okuma, şişirme, A*, yol kısaltma, açıklık kontrolü (donanımdan bağımsız) |
 | [01_Sample/.../GdiCanvas.h](../01_Sample/KobukiNativeVS/include/GdiCanvas.h) | Çizim tuvali, pencere, PNG (09 ile ortak) |
 | [src/main.cpp](src/main.cpp) | Argümanlar, doğrulama, plan, sürüş döngüsü, kayıt |
 | [src/Robot.h](src/Robot.h) | Gerçek Kobuki ve simülatör |
 | [src/PathFollower.h](src/PathFollower.h) | Dön-git yol takipçisi |
 | [src/PlanView.h](src/PlanView.h) | Harita resmi |
-| [maps/](maps/) | Örnek haritalar |

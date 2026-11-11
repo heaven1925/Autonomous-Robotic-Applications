@@ -20,8 +20,7 @@
     .\run.ps1 10 -Sim        # AStar in its built-in simulator (no hardware needed)
     .\run.ps1 10 -PlanOnly   # AStar: only plan, show and save the path (no robot)
     .\run.ps1 10 -Sim -Goal 9,2   # lab maze, goal = row 9, column 2 (cells written as in the map file)
-    .\run.ps1 10 -Sim -Map 10_AStarPathPlanning\maps\example_20x10.txt -Goal 18,5
-    .\run.ps1 10 -Sim --smooth --block 10,0   # anything after the known options goes to the app
+    .\run.ps1 10 -Sim --block 6,4   # anything after the known options goes to the app
     .\run.ps1 sample         # interactive teleop demo (KobukiNativeVS)
     .\run.ps1 stop           # just stop whatever is running
     .\run.ps1 2 -Port COM4   # override auto-detected Kobuki port
