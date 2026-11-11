@@ -155,7 +155,7 @@ Varsayılan klasör [`output/`](output/) (git'e eklenmez); `--out` ile değişti
 |---|---|
 | `map_<tarih>.png` | Ekrandaki resim: occupancy grid + grid map + lejant. |
 | `map_<tarih>_grid.png` | Yalnız grid map, ödev görseli biçiminde. |
-| `map_<tarih>_grid.txt` | Grid map, 0/1 metin haritası olarak: `0` boş, `1` dolu **ya da bilinmiyor** (görülmemiş yer güvenli sayılmaz); üstte `cell`, `start`, `heading` satırları. Biçim 10_AStarPathPlanning ile aynıdır, dosya doğrudan A*'a verilebilir: `AStar.exe map_<tarih>_grid.txt --goal c,r`. |
+| `map_<tarih>_grid.txt` | Grid map, 0/1 metin haritası olarak: `0` boş, `1` dolu **ya da bilinmiyor** (görülmemiş yer güvenli sayılmaz), `*` robotun başladığı hücre; üstte `cell` ve `heading` satırları. Biçim 10_AStarPathPlanning ile aynıdır, dosya doğrudan A*'a verilebilir: `AStar.exe map_<tarih>_grid.txt --goal c,r`. |
 
 ## 6. Bilinen kısıtlar ve saha testi
 

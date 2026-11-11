@@ -11,11 +11,11 @@
 # robot yaricapindan (15 cm) yakin: program en yakin guvenli hucreye
 # kaydirir (bkz. AStar.md).
 name assignment
+# 0 = bos, 1 = engel, * = robotun baslangic hucresi
 cell 0.20
-start 0 0
 goal 15 15
 heading 0
-0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+* 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 0 0 0 0 1 0 0 0 1 1 1 1 1 1 1 0 0 0 0
 0 0 0 0 1 0 0 0 1 0 0 0 0 0 1 0 0 0 0

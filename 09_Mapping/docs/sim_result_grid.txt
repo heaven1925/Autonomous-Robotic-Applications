@@ -1,12 +1,11 @@
 # Kobuki grid map (09_Mapping): 0 = empty, 1 = occupied or unknown
 # 16 columns x 24 rows; 251 empty, 97 occupied, 36 unknown cells (unknown written as 1)
-# orientation as on screen, first grid line = row 0; start = where the robot started
+# orientation as on screen, first grid line = row 0; * = where the robot started (8,1)
 # usable as an A* map: AStar.exe <this file> --goal <column>,<row>
 cell 0.5
-start 8 1
 heading -90
 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1
-1 1 1 1 1 0 0 0 0 0 0 0 0 0 0 1
+1 1 1 1 1 0 0 0 * 0 0 0 0 0 0 1
 1 1 1 1 0 0 0 0 0 0 0 0 0 0 0 1
 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 1
 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1

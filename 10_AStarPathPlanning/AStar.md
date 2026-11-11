@@ -9,17 +9,17 @@ Kullanım: [USER_GUIDE.md](USER_GUIDE.md).
 ```text
 # yorum satırı                 (% ve // da yorum)
 cell 0.20                      hücre boyu, metre (varsayılan 0.20)
-start 0 0                      başlangıç hücresi: sütun satır
-goal  9 2                      hedef hücresi:     sütun satır
+goal  9 2                      hedef hücresi: sütun satır
 heading 0                      robotun ilk yönü, derece (0 = sağa, 90 = yukarı)
-0 0 0 0 0 0 0 0 0 0            0 = boş, 1 = engel
+* 0 0 0 0 0 0 0 0 0            * = başlangıç (robotun durduğu hücre), 0 = boş, 1 = engel
 0 0 0 1 1 0 0 0 0 0            hücreler boşlukla, virgülle ya da bitişik yazılabilir
 0 0 0 1 1 0 0 0 0 0
 ...
 ```
 
 - **Koordinat (sütun, satır):** sütun soldan, satır **üstten** sayılır; dosyanın ilk ızgara satırı 0. satırdır. `(18,5)` = 18. sütun, 5. satır.
-- `start` / `goal` yerine ızgarada `S` / `G` harfi de kullanılabilir.
+- Başlangıç ızgarada `*` ile gösterilir; o hücre boştur. Ayrıca `start 0 0` satırı ya da `S` harfi de kabul edilir. Hedef `goal` satırıyla ya da ızgarada `G` ile verilir.
+- 09 Mapping'in kaydettiği `_grid.txt` de aynı biçimdedir: başlangıç `*`.
 - Komut satırındaki `--start`, `--goal`, `--heading`, `--cell` dosyadaki değerleri ezer.
 - Hatalı dosyada program satır numarasıyla birlikte hatayı söyler (ör. `line 4: this row has 3 cells, the first row has 4`).
 

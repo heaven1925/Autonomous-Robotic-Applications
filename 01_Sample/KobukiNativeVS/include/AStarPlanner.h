@@ -21,7 +21,7 @@
 // Map file example (10 x 4 cells of 20 cm, start top-left, goal right):
 //   # comment                (also: % comment, // comment)
 //   cell 0.20                cell size in metres (default 0.20)
-//   start 0 0                column row   (or put an S in the grid)
+//   start 0 0                column row   (or put a * in the grid)
 //   goal  9 2                column row   (or put a G in the grid)
 //   heading 0                robot's initial heading, degrees (0 = right, 90 = up)
 //   0 0 0 0 0 0 0 0 0 0
@@ -197,17 +197,20 @@ inline bool parseMap(std::istream& in, GridMap& map, std::string& error) {
             continue;
         }
 
-        // Grid row: 0 / 1 (S = start, G = goal), separated by spaces / commas or not
-        // at all; braces are ignored, so "{0,1,0,0}," (C array style) works too.
+        // Grid row: 0 / 1, * = start (S also works), G = goal; separated by spaces /
+        // commas or not at all; braces are ignored, so "{0,1,0,0}," works too.
         std::string row;
         for (char ch : line) {
             if (ch == ' ' || ch == '\t' || ch == ',' || ch == ';' || ch == '{' || ch == '}') continue;
-            const char up = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+            char up = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+            if (up == '*') up = 'S';
             if (up != '0' && up != '1' && up != 'S' && up != 'G')
-                return fail(std::string("unexpected character '") + ch + "' (cells must be 0 = free or 1 = obstacle)");
+                return fail(std::string("unexpected character '") + ch +
+                            "' (cells must be 0 = free, 1 = obstacle, * = start, G = goal)");
             if (up == 'S' || up == 'G') {
                 auto& slot = up == 'S' ? gridStart : gridGoal;
-                if (slot) return fail(std::string("more than one ") + up + " in the grid");
+                if (slot) return fail(up == 'S' ? std::string("more than one start (*) in the grid")
+                                                : std::string("more than one G in the grid"));
                 slot = Cell{ static_cast<int>(row.size()), static_cast<int>(rows.size()) };
             }
             row.push_back(up);
@@ -223,7 +226,7 @@ inline bool parseMap(std::istream& in, GridMap& map, std::string& error) {
     for (int y = 0; y < m.rows(); ++y)
         for (int x = 0; x < m.cols(); ++x)
             m.setOccupied({ x, y }, rows[static_cast<std::size_t>(y)][static_cast<std::size_t>(x)] == '1');
-    m.start = map.start ? map.start : gridStart;   // keyword lines win over S / G letters
+    m.start = map.start ? map.start : gridStart;   // keyword lines win over * / G in the grid
     m.goal = map.goal ? map.goal : gridGoal;
     m.headingDeg = map.headingDeg;
     m.name = map.name;

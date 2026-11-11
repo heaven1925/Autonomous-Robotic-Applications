@@ -3,11 +3,11 @@
 # Robot (0,0)'da, hedef kutunun arkasinda. Robot yaricapi 15 cm oldugu icin
 # kutunun ust kenari ile harita kenari arasindaki tek hucrelik bosluktan
 # gecemez: A* kutunun altindan dolasir.
+# 0 = bos, 1 = engel, * = robotun baslangic hucresi
 cell 0.20
-start 0 0
 goal 9 2
 heading 0
-0 0 0 0 0 0 0 0 0 0
+* 0 0 0 0 0 0 0 0 0
 0 0 0 1 1 0 0 0 0 0
 0 0 0 1 1 0 0 0 0 0
 0 0 0 0 0 0 0 0 0 0

@@ -213,8 +213,9 @@ std::string timestamp() {
 
 // Grid map'i 0/1 metin haritasi olarak kaydeder (ekrandaki yonelimle):
 //   0 = bos, 1 = dolu YA DA bilinmiyor (gorulmemis yer guvenli sayilmaz).
-// Bicim 10_AStarPathPlanning harita dosyasiyla aynidir (cell / start /
-// heading satirlari + 0/1 izgara), yani dosya dogrudan A*'a verilebilir:
+//   * = robotun basladigi hucre.
+// Bicim 10_AStarPathPlanning harita dosyasiyla aynidir (cell / heading
+// satirlari + 0/1 izgara), yani dosya dogrudan A*'a verilebilir:
 //   AStar.exe <bu dosya> --goal c,r
 bool saveCellMapText(const std::filesystem::path& path, const ogm::CellMap& m, int quarterTurns) {
     if (m.nx <= 0 || m.ny <= 0) return false;
@@ -255,13 +256,18 @@ bool saveCellMapText(const std::filesystem::path& path, const ogm::CellMap& m, i
     out << "# Kobuki grid map (09_Mapping): 0 = empty, 1 = occupied or unknown\n"
         << "# " << cols << " columns x " << rows << " rows; " << counts[1] << " empty, " << counts[2] << " occupied, "
         << counts[0] << " unknown cells (unknown written as 1)\n"
-        << "# orientation as on screen, first grid line = row 0; start = where the robot started\n"
+        << "# orientation as on screen, first grid line = row 0; * = where the robot started ("
+        << startCol - colMin << "," << startRow - rowMin << ")\n"
         << "# usable as an A* map: AStar.exe <this file> --goal <column>,<row>\n"
         << "cell " << m.cellSize << "\n"
-        << "start " << startCol - colMin << " " << startRow - rowMin << "\n"
         << "heading " << heading << "\n";
-    for (const auto& line : grid) {
-        for (std::size_t i = 0; i < line.size(); ++i) out << (i ? " " : "") << line[i];
+    for (std::size_t r = 0; r < grid.size(); ++r) {
+        for (std::size_t i = 0; i < grid[r].size(); ++i) {
+            const bool isStart = static_cast<int>(r) == startRow - rowMin && static_cast<int>(i) == startCol - colMin;
+            out << (i ? " " : "");
+            if (isStart) out << '*';
+            else out << grid[r][i];
+        }
         out << "\n";
     }
     return static_cast<bool>(out);

@@ -27,20 +27,19 @@ Harita verilmezse [maps/assignment.txt](maps/assignment.txt) (ödev görseli) ku
 ```text
 # 2 m x 2 m oda, ortada 40 cm'lik kutu
 cell 0.20
-start 0 0
 goal 9 2
 heading 0
-0 0 0 0 0 0 0 0 0 0
+* 0 0 0 0 0 0 0 0 0
 0 0 0 1 1 0 0 0 0 0
 0 0 0 1 1 0 0 0 0 0
 0 0 0 0 0 0 0 0 0 0
 ...
 ```
 
-- `0` = boş, `1` = engel. Her hücre `cell` metredir (varsayılan 20 cm). 10 hücre × 20 cm = 2 m.
+- `0` = boş, `1` = engel, `*` = başlangıç (robotun durduğu hücre). Her hücre `cell` metredir (varsayılan 20 cm). 10 hücre × 20 cm = 2 m.
 - Koordinatlar **(sütun, satır)** şeklindedir: sütun soldan, satır **üstten** (dosyanın ilk ızgara satırı = 0) sayılır.
 - `heading`: robotun başlangıçtaki yönü. 0 = sağa (sütun artan), 90 = yukarı (satır 0'a doğru), 180 = sola, 270 = aşağı.
-- `start` / `goal` yazmak yerine ızgaraya `S` ve `G` harfi koyabilirsiniz.
+- Hedefi `goal` satırı yerine ızgaraya `G` yazarak da verebilirsiniz. Başlangıç için `*` yerine `start 0 0` satırı da kabul edilir.
 - 40 cm'lik bir engel 2×2 hücre `1` demektir.
 
 ## 3. Ekran
@@ -57,7 +56,7 @@ heading 0
 **Konsol:** haritanın metin hali yazılır.
 
 ```text
-# engel   + robot merkezi giremez   . boş   * A* yolu   S başlangıç   G hedef   X tamponla bulunan engel
+# engel   + robot merkezi giremez   . boş   * başlangıç   o A* yolu   G hedef   X tamponla bulunan engel   R robot (sürüş sonunda)
 ```
 
 | Tuş (pencere ya da konsol) | Etki |

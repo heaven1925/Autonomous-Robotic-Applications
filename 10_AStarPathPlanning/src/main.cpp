@@ -214,8 +214,8 @@ const char* headingName(double deg) {
 
 // Konsol / metin dosyasi icin haritanin ASCII cizimi.
 //   #  engel          +  robot merkezi giremez (engele yaricaptan yakin)
-//   .  bos            *  A* yolu            S / G baslangic / hedef
-//   X  tamponla bulunan engel                o  surus sirasinda robotun hucresi
+//   .  bos            o  A* yolu            * / G baslangic / hedef
+//   X  tamponla bulunan engel                R  surus sonunda robotun hucresi
 void writeGrid(std::ostream& out, const astar::CostMap& cm, const std::vector<Cell>& path, Cell start, Cell goal,
                const std::vector<Cell>& marked, const std::optional<Cell>& robot = std::nullopt) {
     const astar::GridMap& m = cm.map();
@@ -228,9 +228,9 @@ void writeGrid(std::ostream& out, const astar::CostMap& cm, const std::vector<Ce
             else if (cm.inflated(c)) k = '+';
         }
     for (const Cell& c : marked) if (m.inside(c)) ch[static_cast<std::size_t>(m.index(c))] = 'X';
-    for (const Cell& c : path) if (m.inside(c)) ch[static_cast<std::size_t>(m.index(c))] = '*';
-    if (robot && m.inside(*robot)) ch[static_cast<std::size_t>(m.index(*robot))] = 'o';
-    if (m.inside(start)) ch[static_cast<std::size_t>(m.index(start))] = 'S';
+    for (const Cell& c : path) if (m.inside(c)) ch[static_cast<std::size_t>(m.index(c))] = 'o';
+    if (robot && m.inside(*robot)) ch[static_cast<std::size_t>(m.index(*robot))] = 'R';
+    if (m.inside(start)) ch[static_cast<std::size_t>(m.index(start))] = '*';
     if (m.inside(goal)) ch[static_cast<std::size_t>(m.index(goal))] = 'G';
 
     if (m.cols() > 10) {
@@ -323,7 +323,7 @@ int main(int argc, char** argv) {
     if (!map.start || !map.goal) {
         std::cerr << "MAP ERROR: no " << (!map.start ? "start" : "goal") << " cell - add a line like '"
                   << (!map.start ? "start 0 0" : "goal 9 2") << "' to the map file (or an "
-                  << (!map.start ? "S" : "G") << " in the grid), or use --" << (!map.start ? "start" : "goal") << " c,r\n";
+                  << (!map.start ? "*" : "G") << " in the grid), or use --" << (!map.start ? "start" : "goal") << " c,r\n";
         return 1;
     }
     const Cell start = *map.start;
@@ -395,7 +395,7 @@ int main(int argc, char** argv) {
                   << plan.search.expanded << " cells.\n"
                   << "    Every way is blocked or narrower than the robot (" << 2 * clearanceNeed * 100.0 << " cm).\n\n";
     }
-    std::cout << "Legend: # obstacle   + too close for the robot centre   . free   * A* path   S start   G goal\n";
+    std::cout << "Legend: # obstacle   + too close for the robot centre   . free   o A* path   * start   G goal\n";
     writeGrid(std::cout, cm, plan.search.path, start, goal, marked);
     std::cout << "\n";
 
@@ -539,7 +539,7 @@ int main(int argc, char** argv) {
         if (withRun)
             out << "run        : " << result << ", " << runTime << " s, driven " << driven << " m, bumps " << bumps
                 << ", re-plans " << replans << ", final error " << finalError * 100.0 << " cm\n";
-        out << "\nlegend: # obstacle   + too close for the robot centre   . free   * path   S start   G goal   X found by the bumper\n";
+        out << "\nlegend: # obstacle   + too close for the robot centre   . free   o path   * start   G goal   X found by the bumper\n";
         writeGrid(out, cm, plan.search.path, start, goal, marked);
         out << "\nwaypoints (column,row  ->  x, y in metres; origin = bottom-left corner of the map):\n";
         const auto& pts = withRun ? follower.points() : plan.route;
@@ -761,7 +761,7 @@ int main(int argc, char** argv) {
         for (const Cell& c : marked) std::cout << " " << cellText(c);
         std::cout << "\n";
     }
-    std::cout << "\nLegend: # obstacle   + too close   * last A* path   X found by the bumper   o robot\n";
+    std::cout << "\nLegend: # obstacle   + too close   o last A* path   * start   X found by the bumper   R robot\n";
     writeGrid(std::cout, cm, plan.search.path, start, goal, marked, endCell);
     std::cout << "\n" << (savedRun ? "Saved         : " : "!! could not save ") << runPng.string() << "\n"
               << "                " << runTxt.string() << "\n";
