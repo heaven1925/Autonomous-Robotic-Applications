@@ -13,7 +13,7 @@ Donanım 08 (Tangent Bug) ile **aynıdır**: Arduino'ya bağlı sol-ön (+60°),
 | [`src/RobotIO.h`](src/RobotIO.h) | Gerçek robot (Kobuki + Arduino) ve **ödev görselindeki planın** dahili simülatörü (`--sim`). |
 | [`src/MapView.h`](src/MapView.h) | Canlı harita penceresi ve PNG kaydı (yalnızca Windows GDI/GDI+, ek kütüphane yok). |
 | [`src/main.cpp`](src/main.cpp) | Uygulama: döngü, güvenlik katmanı, elle sürüş modu, kayıt ve özet. |
-| [`arduino/sensor/sensor.ino`](arduino/sensor/sensor.ino) | 08 ile aynı sketch: 3 sensör sırayla, kanal başına son 2 ölçümün küçüğü, `{"l":..,"f":..,"r":..}`. |
+| [`../08_TangentBugAlgorithm/arduino/sensor/sensor.ino`](../08_TangentBugAlgorithm/arduino/sensor/sensor.ino) | Arduino sketch (08 ile ortak): 3 sensör sırayla, kanal başına son 2 ölçümün küçüğü, `{"l":..,"f":..,"r":..}`. |
 
 ## 2. Algoritma (ders notu ↔ kod)
 
@@ -155,7 +155,7 @@ Varsayılan klasör [`output/`](output/) (git'e eklenmez); `--out` ile değişti
 |---|---|
 | `map_<tarih>.png` | Ekrandaki resim: occupancy grid + grid map + lejant. |
 | `map_<tarih>_grid.png` | Yalnız grid map, ödev görseli biçiminde. |
-| `map_<tarih>_grid.txt` | Grid map metin olarak: `#` dolu, `.` boş, `?` bilinmiyor, `S` başlangıç, `R` robot. Yol planlama örneklerinde girdi olarak kullanılabilir. |
+| `map_<tarih>_grid.txt` | Grid map, 0/1 metin haritası olarak: `0` boş, `1` dolu **ya da bilinmiyor** (görülmemiş yer güvenli sayılmaz); üstte `cell`, `start`, `heading` satırları. Biçim 10_AStarPathPlanning ile aynıdır, dosya doğrudan A*'a verilebilir: `AStar.exe map_<tarih>_grid.txt --goal c,r`. |
 
 ## 6. Bilinen kısıtlar ve saha testi
 

@@ -197,10 +197,11 @@ inline bool parseMap(std::istream& in, GridMap& map, std::string& error) {
             continue;
         }
 
-        // Grid row: 0 / 1 (S = start, G = goal), separated by spaces / commas or not at all.
+        // Grid row: 0 / 1 (S = start, G = goal), separated by spaces / commas or not
+        // at all; braces are ignored, so "{0,1,0,0}," (C array style) works too.
         std::string row;
         for (char ch : line) {
-            if (ch == ' ' || ch == '\t' || ch == ',' || ch == ';') continue;
+            if (ch == ' ' || ch == '\t' || ch == ',' || ch == ';' || ch == '{' || ch == '}') continue;
             const char up = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
             if (up != '0' && up != '1' && up != 'S' && up != 'G')
                 return fail(std::string("unexpected character '") + ch + "' (cells must be 0 = free or 1 = obstacle)");

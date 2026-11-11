@@ -211,10 +211,12 @@ std::string timestamp() {
     return buf;
 }
 
-// Grid map'i metin olarak kaydeder (ekrandaki yonelimle; ileride yol
-// planlama orneklerinde girdi olarak kullanilabilir).
-bool saveCellMapText(const std::filesystem::path& path, const ogm::CellMap& m, int quarterTurns,
-                     const explore::Pose& pose) {
+// Grid map'i 0/1 metin haritasi olarak kaydeder (ekrandaki yonelimle):
+//   0 = bos, 1 = dolu YA DA bilinmiyor (gorulmemis yer guvenli sayilmaz).
+// Bicim 10_AStarPathPlanning harita dosyasiyla aynidir (cell / start /
+// heading satirlari + 0/1 izgara), yani dosya dogrudan A*'a verilebilir:
+//   AStar.exe <bu dosya> --goal c,r
+bool saveCellMapText(const std::filesystem::path& path, const ogm::CellMap& m, int quarterTurns) {
     if (m.nx <= 0 || m.ny <= 0) return false;
     view::Viewport vp;
     vp.k = quarterTurns;
@@ -231,30 +233,37 @@ bool saveCellMapText(const std::filesystem::path& path, const ogm::CellMap& m, i
     const int colMin = std::min(c0, c1), rowMin = std::min(r0, r1);
     const int cols = std::abs(c1 - c0) + 1, rows = std::abs(r1 - r0) + 1;
 
-    std::vector<std::string> lines(static_cast<std::size_t>(rows), std::string(static_cast<std::size_t>(cols), '?'));
-    const int rx = ogm::CellMap::indexOf(pose.x, m.cellSize), ry = ogm::CellMap::indexOf(pose.y, m.cellSize);
+    std::vector<std::vector<int>> grid(static_cast<std::size_t>(rows), std::vector<int>(static_cast<std::size_t>(cols), 1));
+    int counts[3] = {};  // bilinmiyor, bos, dolu
     for (int iy = m.iy0; iy < m.iy0 + m.ny; ++iy) {
         for (int ix = m.ix0; ix < m.ix0 + m.nx; ++ix) {
             int col, row;
             toRowCol(ix, iy, col, row);
-            char ch = '?';
             const ogm::Cell st = m.at(ix, iy);
-            if (st == ogm::Cell::Occupied) ch = '#';
-            else if (st == ogm::Cell::Empty) ch = '.';
-            if (ix == rx && iy == ry) ch = 'R';
-            if (ix == 0 && iy == 0) ch = 'S';
-            lines[static_cast<std::size_t>(row - rowMin)][static_cast<std::size_t>(col - colMin)] = ch;
+            ++counts[static_cast<int>(st)];
+            grid[static_cast<std::size_t>(row - rowMin)][static_cast<std::size_t>(col - colMin)] = st == ogm::Cell::Empty ? 0 : 1;
         }
     }
+    int startCol, startRow;
+    toRowCol(0, 0, startCol, startRow);   // robotun basladigi hucre
+    double u, v;
+    vp.toView(1.0, 0.0, u, v);            // robotun ilk yonu (+x) resimde nereye bakiyor
+    const long heading = std::lround(std::atan2(v, u) * 180.0 / ogm::Pi);
 
     std::ofstream out(path);
     if (!out) return false;
-    out << "% Kobuki grid map (09_Mapping)\n"
-        << "% cell_size_m " << m.cellSize << "\n"
-        << "% columns " << cols << " rows " << rows << "\n"
-        << "% legend: # occupied   . empty   ? unknown   S start cell   R robot cell\n"
-        << "% orientation: as shown on screen (view quarter turns = " << (quarterTurns & 3) << "), first line = top row\n";
-    for (const auto& line : lines) out << line << "\n";
+    out << "# Kobuki grid map (09_Mapping): 0 = empty, 1 = occupied or unknown\n"
+        << "# " << cols << " columns x " << rows << " rows; " << counts[1] << " empty, " << counts[2] << " occupied, "
+        << counts[0] << " unknown cells (unknown written as 1)\n"
+        << "# orientation as on screen, first grid line = row 0; start = where the robot started\n"
+        << "# usable as an A* map: AStar.exe <this file> --goal <column>,<row>\n"
+        << "cell " << m.cellSize << "\n"
+        << "start " << startCol - colMin << " " << startRow - rowMin << "\n"
+        << "heading " << heading << "\n";
+    for (const auto& line : grid) {
+        for (std::size_t i = 0; i < line.size(); ++i) out << (i ? " " : "") << line[i];
+        out << "\n";
+    }
     return static_cast<bool>(out);
 }
 
@@ -547,7 +556,7 @@ int main(int argc, char** argv) {
         BitBlt(cropped.dc(), 8, 8, vp.w + 1, vp.h + 1, big.dc(), vp.ox, vp.oy, SRCCOPY);
         savedGrid = cropped.savePng(gridPng.wstring());
     }
-    const bool savedTxt = saveCellMapText(gridTxt, cells, viewTurns, s.pose);
+    const bool savedTxt = saveCellMapText(gridTxt, cells, viewTurns);
 
     std::cout << "\n\n--- Summary ---\n"
               << "Result        : " << result << "\n"

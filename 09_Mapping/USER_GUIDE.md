@@ -25,7 +25,7 @@ Bir pencere açılır:
 | `R` | Resmi 90° döndür |
 | `W A S D` / ok tuşları, `X`/Boşluk | Yalnız `-Manual`: ileri, sol, geri, sağ, dur |
 
-İş bitince haritalar [`09_Mapping/output/`](output/) klasörüne kaydedilir: tam resim (`.png`), yalnız grid map (`_grid.png`) ve metin (`_grid.txt`). Pencere siz kapatana (ya da `Q`/Enter'a basana) kadar açık kalır.
+İş bitince haritalar [`09_Mapping/output/`](output/) klasörüne kaydedilir: tam resim (`.png`), yalnız grid map (`_grid.png`) ve 0/1 metin haritası (`_grid.txt`: 0 boş, 1 dolu ya da bilinmiyor; 10_AStarPathPlanning'e doğrudan verilebilir). Pencere siz kapatana (ya da `Q`/Enter'a basana) kadar açık kalır.
 
 ## 2. Donanım
 
@@ -38,7 +38,7 @@ Bir pencere açılır:
 | Sağ-ön | 60° sağa | D7 | D8 |
 
 - Sensörler robot merkezinden ~11 cm uzakta, yere paralel takılıdır.
-- Sketch: [`arduino/sensor/sensor.ino`](arduino/sensor/sensor.ino). 08'deki sketch zaten yüklüyse yeniden yüklemeye gerek yoktur.
+- Sketch: 08 ile ortak, [`08_TangentBugAlgorithm/arduino/sensor/sensor.ino`](../08_TangentBugAlgorithm/arduino/sensor/sensor.ino). 08'deki sketch zaten yüklüyse yeniden yüklemeye gerek yoktur.
 - Montaj farklıysa [`src/main.cpp`](src/main.cpp) başındaki `SensorOffsetM`, `SideBeamDeg` ve `RobotRadiusM` sabitlerini güncelleyin.
 - Sensörleri kontrol etmek için: `.\run.ps1 8 -SensorTest`.
 
