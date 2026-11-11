@@ -63,6 +63,7 @@ public:
     virtual double tick() = 0;            // wait one control period, return elapsed seconds
     virtual void shutdown() { stop(); }   // stop and release the robot at program end
     virtual void resetPose() {}           // "the robot is on the start pose now" (real robot: re-zero odometry)
+    virtual void shiftPose(double, double) {}   // correct the position estimate (simulator: exact already)
     virtual const char* name() const = 0;
 };
 
@@ -89,6 +90,13 @@ public:
         heading0_ = robot_.getHeading();
         lastHeading_ = 0.0;
         ox_ = oy_ = 0.0;
+        corrX_ = corrY_ = 0.0;
+    }
+
+    // Bumper against a KNOWN obstacle: the odometry has drifted by (dx, dy).
+    void shiftPose(double dx, double dy) override {
+        corrX_ += dx;
+        corrY_ += dy;
     }
 
     Snapshot read() override {
@@ -107,8 +115,8 @@ public:
         // ... turned into the map frame with the start pose.
         Snapshot s;
         const double c = std::cos(start_.heading), sn = std::sin(start_.heading);
-        s.pose.x = start_.x + ox_ * c - oy_ * sn;
-        s.pose.y = start_.y + ox_ * sn + oy_ * c;
+        s.pose.x = start_.x + ox_ * c - oy_ * sn + corrX_;
+        s.pose.y = start_.y + ox_ * sn + oy_ * c + corrY_;
         s.pose.heading = normalizeAngle(start_.heading + heading);
 
         const auto core = robot_.getCoreSensorData();
@@ -139,6 +147,7 @@ private:
     Pose start_;
     kobuki::Kobuki robot_;
     double ox_ = 0.0, oy_ = 0.0, lastDist_ = 0.0, lastHeading_ = 0.0, heading0_ = 0.0;
+    double corrX_ = 0.0, corrY_ = 0.0;   // corrections from bumps against known obstacles
     std::chrono::steady_clock::time_point lastTick_;
 };
 

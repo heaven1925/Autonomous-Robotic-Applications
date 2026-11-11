@@ -12,7 +12,7 @@
 # !! HUCRE BOYU fotograftan TAHMIN edildi (~43 cm). Bir hucreyi (iki kirmizi
 # cizgi arasini) zeminde olcup asagidaki "cell" degerini duzeltin.
 name lab
-cell 0.43
+cell 0.40
 coords row-col 1
 border wall
 heading 270

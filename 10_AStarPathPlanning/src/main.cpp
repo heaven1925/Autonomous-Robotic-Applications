@@ -68,6 +68,9 @@ constexpr double SmoothExtraM   = 0.05;   // --smooth: kestirmeler yaricaptan bu
 constexpr double BackOffM       = 0.10;   // tampondan sonra geri cekilme (m)
 constexpr double BackOffSpeed   = 0.08;   // m/s
 constexpr int    MaxReplans     = 10;     // bu kadar carpmadan sonra vazgec
+constexpr double KobukiBodyM    = 0.175;  // Kobuki govdesinin gercek yaricapi (tampon temasi icin)
+constexpr double MaxDriftM      = 0.12;   // tampon temasinda kabul edilen en buyuk konum hatasi
+constexpr double CliffAbortS    = 1.5;    // ucurum sinyali bu kadar surerse dur (kisa sinyal: bekle, devam)
 constexpr double HudPeriodS     = 0.25;
 constexpr double ViewPeriodS    = 0.10;
 
@@ -80,7 +83,7 @@ BOOL WINAPI consoleHandler(DWORD signal) {
 
 struct Options {
     std::string mapPath, port, outDir;
-    bool sim = false, gui = true, fast = false, smooth = false, four = false, walled = false, strict = false;
+    bool sim = false, gui = true, fast = false, smooth = false, four = false, walled = false, strict = false, go = false;
     std::optional<Cell> start, goal;
     std::optional<double> heading, cell;
     double radius = DefaultRadiusM, margin = 0.0;
@@ -95,7 +98,7 @@ void usage(const char* exe) {
               << "       " << exe << " [map.txt] --sim [options]           plan + drive in the simulator\n"
               << "       " << exe << " [map.txt] <Kobuki COM> [options]    plan + drive the real robot\n"
               << "Options: --start c,r  --goal c,r  --heading deg  --cell m  --radius m  --margin m\n"
-              << "         --4  --smooth  --walled  --strict  --block c,r (sim)  --no-gui  --fast  --out dir\n";
+              << "         --4  --smooth  --walled  --strict  --block c,r (sim)  --no-gui  --fast  --out dir  --go (real robot: start after 3 s, no Enter)\n";
 }
 
 bool isPort(const std::string& s) {
@@ -142,6 +145,7 @@ bool parseArgs(int argc, char** argv, Options& o) {
         else if (a == "--8") o.four = false;
         else if (a == "--walled") o.walled = true;
         else if (a == "--strict") o.strict = true;
+        else if (a == "--go") o.go = true;
         else if (a == "--start") { if (!readCell(argc, argv, i, c)) return false; o.start = c; }
         else if (a == "--goal") { if (!readCell(argc, argv, i, c)) return false; o.goal = c; }
         else if (a == "--block") { if (!readCell(argc, argv, i, c)) return false; o.hidden.push_back(c); }
@@ -288,6 +292,47 @@ Plan makePlan(const astar::CostMap& cm, Cell start, Cell goal, const Options& o)
     return p;
 }
 
+// Tampon, haritada ZATEN bilinen bir engele (ya da duvar kenara) mi degdi?
+// Tamponun baktigi yon +-70 derece icinde, govde yaricapi + MaxDriftM'den
+// yakin bilinen en yakin engel noktasini arar. Bulursa: u = merkezden o
+// noktaya birim vektor, dist = tahmini merkezden uzaklik. Gercekte merkez
+// engelden tam govde yaricapi kadar uzakta oldugu icin konum tahmini
+// u * (dist - govde yaricapi) kadar kaydirilir (odometri kaymasi duzeltilir).
+bool knownContact(const astar::CostMap& cm, const nav::Pose& pose, nav::Bumper b, double body, Point& u,
+                  double& dist) {
+    const double rel = b == nav::Bumper::Left ? 45.0 * Deg : (b == nav::Bumper::Right ? -45.0 * Deg : 0.0);
+    const double a = pose.heading + rel;
+    const astar::GridMap& m = cm.map();
+    const Point p = pose.point();
+    const double reach = body + MaxDriftM;
+    dist = reach;
+    bool found = false;
+    const auto consider = [&](Point q) {
+        const double d = astar::distance(p, q);
+        if (d < 1e-6 || d >= dist) return;
+        if (std::abs(nav::normalizeAngle(std::atan2(q.y - p.y, q.x - p.x) - a)) > 70.0 * Deg) return;
+        dist = d;
+        u = { (q.x - p.x) / d, (q.y - p.y) / d };
+        found = true;
+    };
+    const Cell at = m.cellAt(p);
+    const int w = static_cast<int>(std::ceil(reach / m.cellSize())) + 1;
+    for (int y = at.y - w; y <= at.y + w; ++y)
+        for (int x = at.x - w; x <= at.x + w; ++x) {
+            if (!m.occupied({ x, y })) continue;
+            double x0, y0, x1, y1;
+            m.bounds({ x, y }, x0, y0, x1, y1);
+            consider({ std::clamp(p.x, x0, x1), std::clamp(p.y, y0, y1) });
+        }
+    if (cm.walledBorder()) {
+        consider({ 0.0, p.y });
+        consider({ m.width(), p.y });
+        consider({ p.x, 0.0 });
+        consider({ p.x, m.height() });
+    }
+    return found;
+}
+
 // Tampon: degilen noktanin hucresi (robotun kendi hucresi degil).
 std::optional<Cell> bumpCell(const astar::CostMap& cm, const nav::Pose& pose, nav::Bumper b, double radius) {
     const double rel = b == nav::Bumper::Left ? 45.0 * Deg : (b == nav::Bumper::Right ? -45.0 * Deg : 0.0);
@@ -429,7 +474,7 @@ int main(int argc, char** argv) {
     nav::PathFollower follower;
     const char* phaseText = "PLANNED";
     double runTime = 0.0, driven = 0.0, finalError = -1.0;
-    int bumps = 0, replans = 0;
+    int bumps = 0, replans = 0, corrections = 0;
 
     const auto infoLines = [&]() {
         std::vector<std::wstring> v;
@@ -469,7 +514,7 @@ int main(int argc, char** argv) {
             v.push_back(L"#Run");
             swprintf(b, 160, L"t %.1f s, driven %.2f m", runTime, driven);
             v.push_back(b);
-            swprintf(b, 160, L"bumps %d, re-plans %d", bumps, replans);
+            swprintf(b, 160, L"bumps %d, re-plans %d, position fixes %d", bumps, replans, corrections);
             v.push_back(b);
             swprintf(b, 160, L"max distance from the line %.1f cm", follower.maxCrossTrack() * 100.0);
             v.push_back(b);
@@ -614,11 +659,16 @@ int main(int argc, char** argv) {
         std::cout << "\nPlace the robot with its CENTRE on cell " << cellText(start) << ", facing " << headingName(headingDeg)
                   << ".\nEvery cell is " << map.cellSize() * 100.0 << " cm; the map's top-left corner is the corner of cell "
                   << cellText({ 0, 0 }) << ".\n"
-                  << "Press ENTER to start driving, Q to quit.\n";
+                  << (opt.go ? "--go: starting in 3 s (Q / close the window to cancel).\n"
+                             : "Press ENTER to start driving, Q to quit.\n")
+                  << std::flush;
+        // --go: Enter yerine 3 s geri sayim (program etkilesimsiz baslatildiginda).
+        const auto waitStart = std::chrono::steady_clock::now();
         while (true) {
             window.pump();
             const int key = pollKey(window);
             if (key == VK_RETURN) break;
+            if (opt.go && std::chrono::steady_clock::now() - waitStart >= std::chrono::seconds(3)) break;
             if (key == 'Q' || key == VK_ESCAPE || g_quit || window.closedByUser()) {
                 std::cout << "Not started.\n";
                 robot->shutdown();
@@ -644,7 +694,7 @@ int main(int argc, char** argv) {
     const char* result = nullptr;
     nav::Bumper lastBumper = nav::Bumper::None;
     nav::Pose backStart{};
-    double backTime = 0.0, dt = 0.0;
+    double backTime = 0.0, dt = 0.0, cliffTime = 0.0;
     bool paused = false;
     int lastLeg = -1;
     trail.push_back(snap.pose.point());
@@ -657,7 +707,21 @@ int main(int argc, char** argv) {
         if (astar::distance(trail.back(), lastPoint) >= 0.01) trail.push_back(lastPoint);
 
         // Guvenlik.
-        if (snap.fault) { result = snap.fault; mode = Mode::Failed; break; }
+        // Ucurum: hemen dur. Sinyal CliffAbortS'den uzun surerse bitir; kisa
+        // bir sinyalde (koyu / parlak zemin yanlis alarmi) bekleyip devam et.
+        if (snap.fault) {
+            robot->stop();
+            if (cliffTime == 0.0) std::cout << "\n  " << snap.fault << " - stopped, waiting " << CliffAbortS << " s...\n";
+            cliffTime += dt;
+            if (cliffTime >= CliffAbortS) { result = snap.fault; mode = Mode::Failed; break; }
+            window.pump();
+            dt = robot->tick();
+            continue;
+        }
+        if (cliffTime > 0.0) {
+            std::cout << "  Cliff signal gone after " << std::setprecision(1) << cliffTime << " s - continuing.\n";
+            cliffTime = 0.0;
+        }
         if (g_quit) { result = "stopped by the user (Ctrl+C)"; mode = Mode::Failed; break; }
         window.pump();
         const int key = pollKey(window);
@@ -675,9 +739,20 @@ int main(int argc, char** argv) {
         if (bumped && mode == Mode::Drive) {
             ++bumps;
             robot->stop();
-            const auto hit = bumpCell(cm, snap.pose, snap.bumper, opt.radius);
             std::cout << "\n  Bumper hit at (" << std::fixed << std::setprecision(2) << snap.pose.x << ", " << snap.pose.y << ")";
-            if (hit && !cm.obstacle(*hit)) {
+            const double body = opt.sim ? opt.radius : KobukiBodyM;
+            Point u;
+            double dist = 0.0;
+            const auto hit = bumpCell(cm, snap.pose, snap.bumper, opt.radius);
+            if (knownContact(cm, snap.pose, snap.bumper, body, u, dist)) {
+                // Bilinen engel: yeni bir sey yok, konum tahmini kaymis - duzelt.
+                const double shift = dist - body;
+                robot->shiftPose(u.x * shift, u.y * shift);
+                snap = robot->read();
+                ++corrections;
+                std::cout << " - a known obstacle: position corrected by " << std::setprecision(1) << shift * 100.0
+                          << " cm to (" << std::setprecision(2) << snap.pose.x << ", " << snap.pose.y << ")";
+            } else if (hit && !cm.obstacle(*hit)) {
                 cm.addObstacle(*hit);
                 marked.push_back(*hit);
                 std::cout << " - cell " << cellText(*hit) << " is blocked, added to the map";
@@ -771,7 +846,7 @@ int main(int argc, char** argv) {
               << "Driven        : " << driven << " m (planned " << std::setprecision(2) << astar::length(plan.route) << " m)\n"
               << std::setprecision(1)
               << "Off the line  : max " << follower.maxCrossTrack() * 100.0 << " cm\n"
-              << "Bumper hits   : " << bumps << ", re-plans " << replans << "\n";
+              << "Bumper hits   : " << bumps << ", re-plans " << replans << ", position fixes " << corrections << "\n";
     if (!marked.empty()) {
         std::cout << "Found cells   :";
         for (const Cell& c : marked) std::cout << " " << cellText(c);
