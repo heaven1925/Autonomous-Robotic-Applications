@@ -18,6 +18,10 @@ heading 0                      robotun ilk yönü, derece (0 = sağa, 90 = yukar
 ```
 
 - **Koordinat (sütun, satır):** sütun soldan, satır **üstten** sayılır; dosyanın ilk ızgara satırı 0. satırdır. `(18,5)` = 18. sütun, 5. satır.
+- İsteğe bağlı iki satır daha var:
+  - `coords row-col 1`: hücreler (satır, sütun) sırasında ve 1'den sayılarak yazılır, zemindeki numaralı ızgara gibi. Varsayılan `coords col-row 0`'dır. Dosyadaki `start`/`goal`, komut satırındaki `--start`/`--goal`/`--block`, ekrandaki tüm mesajlar ve resimdeki numaralar bu yazımı kullanır.
+  - `border wall`: harita kenarı duvardır (`--walled` ile aynı). Varsayılan `border open`'dır.
+  - Laboratuvar labirenti ([maps/lab.txt](maps/lab.txt)) ikisini de kullanır: 8×11 hücre, başlangıç (1,7).
 - Başlangıç ızgarada `*` ile gösterilir; o hücre boştur. Ayrıca `start 0 0` satırı ya da `S` harfi de kabul edilir. Hedef `goal` satırıyla ya da ızgarada `G` ile verilir.
 - 09 Mapping'in kaydettiği `_grid.txt` de aynı biçimdedir: başlangıç `*`.
 - Komut satırındaki `--start`, `--goal`, `--heading`, `--cell` dosyadaki değerleri ezer.
@@ -29,7 +33,9 @@ Metre cinsinden harita çerçevesinde orijin haritanın **sol-alt köşesi**, +x
 
 | Dosya | Boyut | Ne gösterir |
 |---|---|---|
-| `assignment.txt` | 19×19 (3,8 × 3,8 m) | Ödev görselindeki plan (varsayılan harita) |
+| `lab.txt` | 8×11 hücre, 43 cm (tahmini) | **Laboratuvar labirenti (varsayılan harita)**: başlangıç (1,7), (satır, sütun) 1'den, kenarlar duvar |
+| `first_test.txt` | 6×4 (1,2 × 0,8 m) | Gerçek robotla ilk deneme, engelsiz |
+| `assignment.txt` | 19×19 (3,8 × 3,8 m) | Ödev görselindeki plan |
 | `example_10x10.txt` | 10×10 (2 × 2 m) | Hocanın örneği: 40 cm'lik kutu, robot (0,0) |
 | `example_20x10.txt` | 20×10 (4 × 2 m) | Hocanın (0,0) → (18,5) örneği, üç engelle |
 

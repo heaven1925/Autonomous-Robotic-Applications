@@ -6,7 +6,7 @@
 //   Simulasyon   : AStar.exe [harita.txt] --sim [secenekler]
 //   Gercek robot : AStar.exe [harita.txt] <Kobuki COM portu> [secenekler]
 //   Kolay yol    : .\run.ps1 10 -Sim   /   .\run.ps1 10 -PlanOnly   /   .\run.ps1 10
-//   (harita verilmezse maps/assignment.txt kullanilir)
+//   (harita verilmezse maps/lab.txt - laboratuvar labirenti - kullanilir)
 //
 //   Secenekler:
 //     --start c,r    baslangic hucresi (sutun, satir); dosyadakini ezer
@@ -164,9 +164,9 @@ bool parseArgs(int argc, char** argv, Options& o) {
 
 std::string defaultMap() {
 #ifdef ASTAR_MAPS_DIR
-    return std::string(ASTAR_MAPS_DIR) + "/assignment.txt";
+    return std::string(ASTAR_MAPS_DIR) + "/lab.txt";
 #else
-    return "maps/assignment.txt";
+    return "maps/lab.txt";
 #endif
 }
 
@@ -188,7 +188,9 @@ std::string timestamp() {
     return buf;
 }
 
-std::string cellText(Cell c) { return "(" + std::to_string(c.x) + "," + std::to_string(c.y) + ")"; }
+// Hucreler haritanin "coords" satirindaki yazimla gosterilir (orn. satir,sutun 1'den).
+astar::CoordStyle g_coords;
+std::string cellText(Cell c) { return g_coords.text(c); }
 std::wstring wide(const std::string& s) { return std::wstring(s.begin(), s.end()); }
 
 // Ayni haritayi farkli hucre boyutuyla yeniden kurar (--cell).
@@ -200,14 +202,16 @@ astar::GridMap withCellSize(const astar::GridMap& m, double cell) {
     out.goal = m.goal;
     out.headingDeg = m.headingDeg;
     out.name = m.name;
+    out.coords = m.coords;
+    out.walledBorder = m.walledBorder;
     return out;
 }
 
 const char* headingName(double deg) {
     const double a = std::fmod(std::fmod(deg, 360.0) + 360.0, 360.0);
     if (std::abs(a) < 1e-9) return "right (increasing column)";
-    if (std::abs(a - 90.0) < 1e-9) return "up (towards row 0)";
-    if (std::abs(a - 180.0) < 1e-9) return "left (towards column 0)";
+    if (std::abs(a - 90.0) < 1e-9) return "up (towards the first row)";
+    if (std::abs(a - 180.0) < 1e-9) return "left (towards the first column)";
     if (std::abs(a - 270.0) < 1e-9) return "down (increasing row)";
     return "see the angle";
 }
@@ -233,16 +237,20 @@ void writeGrid(std::ostream& out, const astar::CostMap& cm, const std::vector<Ce
     if (m.inside(start)) ch[static_cast<std::size_t>(m.index(start))] = '*';
     if (m.inside(goal)) ch[static_cast<std::size_t>(m.index(goal))] = 'G';
 
-    if (m.cols() > 10) {
+    const int base = m.coords.base;   // numbers as in the map file (0- or 1-based)
+    if (m.cols() - 1 + base >= 10) {
         out << "      ";
-        for (int x = 0; x < m.cols(); ++x) out << (x >= 10 ? static_cast<char>('0' + (x / 10) % 10) : ' ') << ' ';
+        for (int x = 0; x < m.cols(); ++x) {
+            const int n = x + base;
+            out << (n >= 10 ? static_cast<char>('0' + (n / 10) % 10) : ' ') << ' ';
+        }
         out << "\n";
     }
     out << "      ";
-    for (int x = 0; x < m.cols(); ++x) out << x % 10 << ' ';
+    for (int x = 0; x < m.cols(); ++x) out << (x + base) % 10 << ' ';
     out << "\n";
     for (int y = 0; y < m.rows(); ++y) {
-        out << std::setw(4) << y << "  ";
+        out << std::setw(4) << y + base << "  ";
         for (int x = 0; x < m.cols(); ++x) out << ch[static_cast<std::size_t>(m.index({ x, y }))] << ' ';
         out << "\n";
     }
@@ -310,15 +318,20 @@ int main(int argc, char** argv) {
     std::string error;
     if (!astar::loadMap(opt.mapPath, map, error)) { std::cerr << "MAP ERROR: " << error << "\n"; return 1; }
     if (opt.cell) map = withCellSize(map, *opt.cell);
-    if (opt.start) map.start = opt.start;
-    if (opt.goal) map.goal = opt.goal;
+    g_coords = map.coords;
+    if (opt.start) map.start = map.coords.fromUser(opt.start->x, opt.start->y);   // --start / --goal are written
+    if (opt.goal) map.goal = map.coords.fromUser(opt.goal->x, opt.goal->y);       // like the map file ("coords")
+    for (Cell& c : opt.hidden) c = map.coords.fromUser(c.x, c.y);
+    const bool walled = opt.walled || map.walledBorder;
     if (opt.heading) map.headingDeg = opt.heading;
     const std::string mapName = map.name.empty() ? std::filesystem::path(opt.mapPath).stem().string() : map.name;
 
     std::cout << std::fixed << std::setprecision(2)
               << "Map      : " << opt.mapPath << "\n"
               << "           " << map.cols() << " x " << map.rows() << " cells of " << map.cellSize() * 100.0 << " cm = "
-              << map.width() << " x " << map.height() << " m, " << map.obstacleCount() << " obstacle cells\n";
+              << map.width() << " x " << map.height() << " m, " << map.obstacleCount() << " obstacle cells\n"
+              << "           cells written as (" << map.coords.order() << "), counting from " << map.coords.base
+              << (walled ? "; the map border is a wall" : "") << "\n";
 
     if (!map.start || !map.goal) {
         std::cerr << "MAP ERROR: no " << (!map.start ? "start" : "goal") << " cell - add a line like '"
@@ -330,8 +343,9 @@ int main(int argc, char** argv) {
     Cell goal = *map.goal;
     for (const auto& [label, c] : { std::pair{ "start", start }, std::pair{ "goal", goal } }) {
         if (!map.inside(c)) {
-            std::cerr << "ERROR: the " << label << " cell " << cellText(c) << " is outside the map (columns 0.."
-                      << map.cols() - 1 << ", rows 0.." << map.rows() - 1 << ").\n";
+            std::cerr << "ERROR: the " << label << " cell " << cellText(c) << " is outside the map (" << map.rows() << " rows x "
+                      << map.cols() << " columns; cells are written as " << map.coords.order() << ", counting from "
+                      << map.coords.base << ").\n";
             return 1;
         }
         if (map.occupied(c)) {
@@ -342,7 +356,7 @@ int main(int argc, char** argv) {
 
     // --- 2. Konfigurasyon uzayi: robot yaricapi kadar sisirme ---------------
     const double clearanceNeed = opt.radius + opt.margin;
-    astar::CostMap cm(map, clearanceNeed, opt.walled);
+    astar::CostMap cm(map, clearanceNeed, walled);
     std::cout << "Robot    : radius " << opt.radius * 100.0 << " cm";
     if (opt.margin > 0.0) std::cout << " + " << opt.margin * 100.0 << " cm margin";
     std::cout << " -> " << cm.count(astar::CellState::Inflated)
@@ -429,10 +443,11 @@ int main(int argc, char** argv) {
                  cm.count(astar::CellState::Inflated), clearanceNeed * 100.0);
         v.push_back(b);
         v.push_back(L"#A* plan");
-        swprintf(b, 160, L"start (%d,%d)   goal (%d,%d)", start.x, start.y, goal.x, goal.y);
+        swprintf(b, 160, L"start %ls   goal %ls   (%ls)", wide(cellText(start)).c_str(), wide(cellText(goal)).c_str(),
+                 wide(map.coords.order()).c_str());
         v.push_back(b);
         if (requestedGoal) {
-            swprintf(b, 160, L"goal moved from (%d,%d): too close", requestedGoal->x, requestedGoal->y);
+            swprintf(b, 160, L"goal moved from %ls: too close", wide(cellText(*requestedGoal)).c_str());
             v.push_back(b);
         }
         if (plan.search.found) {
@@ -463,12 +478,12 @@ int main(int argc, char** argv) {
                 v.push_back(b);
             }
         }
-        v.push_back(L"#Waypoints (cell = column,row)");
+        v.push_back(L"#Waypoints (cell = " + wide(map.coords.order()) + L")");
         const auto& pts = showRobot ? follower.points() : plan.route;
         for (std::size_t i = 0; i < pts.size(); ++i) {
             const Cell c = map.cellAt(pts[i]);
-            swprintf(b, 160, L"%ls%2d  (%d,%d)   %.2f, %.2f m", showRobot && static_cast<int>(i) == follower.leg() + 1 ? L">" : L" ",
-                     static_cast<int>(i), c.x, c.y, pts[i].x, pts[i].y);
+            swprintf(b, 160, L"%ls%2d  %ls   %.2f, %.2f m", showRobot && static_cast<int>(i) == follower.leg() + 1 ? L">" : L" ",
+                     static_cast<int>(i), wide(cellText(c)).c_str(), pts[i].x, pts[i].y);
             v.push_back(b);
         }
         return v;
@@ -541,7 +556,7 @@ int main(int argc, char** argv) {
                 << ", re-plans " << replans << ", final error " << finalError * 100.0 << " cm\n";
         out << "\nlegend: # obstacle   + too close for the robot centre   . free   o path   * start   G goal   X found by the bumper\n";
         writeGrid(out, cm, plan.search.path, start, goal, marked);
-        out << "\nwaypoints (column,row  ->  x, y in metres; origin = bottom-left corner of the map):\n";
+        out << "\nwaypoints (" << map.coords.order() << "  ->  x, y in metres; origin = bottom-left corner of the map):\n";
         const auto& pts = withRun ? follower.points() : plan.route;
         for (std::size_t i = 0; i < pts.size(); ++i) {
             const Cell c = map.cellAt(pts[i]);
@@ -584,7 +599,7 @@ int main(int argc, char** argv) {
     if (opt.sim) {
         nav::SimRobot::Options so;
         so.radius = opt.radius;
-        so.walledBorder = opt.walled;
+        so.walledBorder = walled;
         so.speed = (opt.fast || !window.isOpen()) ? 0 : 4;
         so.hidden = opt.hidden;
         for (const Cell& c : so.hidden)
@@ -597,7 +612,8 @@ int main(int argc, char** argv) {
     if (!robot->open()) return 1;
     if (opt.hardware()) {
         std::cout << "\nPlace the robot with its CENTRE on cell " << cellText(start) << ", facing " << headingName(headingDeg)
-                  << ".\nEvery cell is " << map.cellSize() * 100.0 << " cm; the map's top-left corner is the corner of cell (0,0).\n"
+                  << ".\nEvery cell is " << map.cellSize() * 100.0 << " cm; the map's top-left corner is the corner of cell "
+                  << cellText({ 0, 0 }) << ".\n"
                   << "Press ENTER to start driving, Q to quit.\n";
         while (true) {
             window.pump();

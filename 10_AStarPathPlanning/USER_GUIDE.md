@@ -11,16 +11,44 @@ Depo kökünde PowerShell açın:
 .\run.ps1 10 -Sim               # Planla ve simülatörde sür
 .\run.ps1 10                    # Planla ve gerçek Kobuki'yi sür (port otomatik bulunur)
 .\run.ps1 10 -Port COM6         # Kobuki portunu elle verin (Arduino gerekmez)
+.\run.ps1 10 -Goal 9,2          # Labirentte başka hedef: 9. satır, 2. sütun
 
 # Başka harita / başlangıç / hedef:
 .\run.ps1 10 -Sim -Map 10_AStarPathPlanning\maps\example_20x10.txt
 .\run.ps1 10 -Sim -Start 0,0 -Goal 18,5 -Map 10_AStarPathPlanning\maps\example_20x10.txt
 
 # Diğer seçenekler olduğu gibi programa aktarılır:
-.\run.ps1 10 -Sim --smooth --block 10,0
+.\run.ps1 10 -Sim --block 8,3   # labirentte haritada olmayan bir engel (satır 8, sütun 3)
 ```
 
-Harita verilmezse [maps/assignment.txt](maps/assignment.txt) (ödev görseli) kullanılır.
+Harita verilmezse laboratuvar labirenti [maps/lab.txt](maps/lab.txt) kullanılır. Diğer haritalar: `assignment.txt` (ödev görseli), `example_10x10.txt`, `example_20x10.txt`, `first_test.txt`.
+
+### Laboratuvar labirenti ([maps/lab.txt](maps/lab.txt))
+
+8 sütun × 11 satır, zemindeki kırmızı ızgaranın aynısı. Koordinatlar fotoğraftaki gibi **(satır, sütun), 1'den** başlar: başlangıç (1,7), varsayılan hedef (11,4). `-Goal`, `-Start` ve `--block` de bu yazımla verilir.
+
+```text
+cell 0.43          # bir hücrenin kenarı (m)  <- ZEMİNDE ÖLÇÜP DÜZELTİN (fotoğraftan tahmin)
+coords row-col 1   # (satır, sütun), 1'den
+border wall        # alanın dört yanı kapalı
+goal 11 4
+heading 270        # robot başlangıçta aşağıya, 11. satıra doğru bakar
+0 0 0 0 0 0 * 1    # satır 1: * = robot (1,7), 8. sütun = beyaz panel
+0 0 0 0 0 0 1 1
+0 0 0 0 1 1 1 1
+0 0 0 0 0 0 1 1
+1 1 1 0 0 0 0 1
+0 0 0 0 0 0 0 1
+0 0 0 0 1 1 0 1
+0 0 0 0 0 0 0 1    # satır 8-11 boş (8. sütun hariç)
+...
+```
+
+Engeller veya başlangıç değişirse yalnızca bu dosyadaki 0/1/* değerlerini değiştirin.
+
+Çalıştırmadan önce:
+1. **Hücre boyunu ölçün:** iki kırmızı çizgi arası. `cell` değerini metre olarak yazın.
+2. **Sol kenarı kontrol edin:** fotoğrafta soldaki tahtalar 1. sütunun içine birkaç cm giriyor gibi. Kobuki'nin yarıçapı yaklaşık 17,5 cm, hücre yarısı yaklaşık 21,5 cm. Tahta 4 cm'den fazla içerideyse 1. sütundan geçen yollarda sürtebilir.
 
 ## 2. Kendi haritanızı yazmak
 

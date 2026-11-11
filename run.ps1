@@ -16,9 +16,10 @@
     .\run.ps1 9              # Mapping: autonomous occupancy-grid mapper (3x HC-SR04 via Arduino + Kobuki)
     .\run.ps1 9 -Sim         # Mapping in its built-in simulator (no hardware needed)
     .\run.ps1 9 -Manual      # Mapping while you drive the robot from the keyboard (also with -Sim)
-    .\run.ps1 10             # AStar: plan on maps\assignment.txt and drive the real Kobuki
+    .\run.ps1 10             # AStar: plan on maps\lab.txt (lab maze) and drive the real Kobuki
     .\run.ps1 10 -Sim        # AStar in its built-in simulator (no hardware needed)
     .\run.ps1 10 -PlanOnly   # AStar: only plan, show and save the path (no robot)
+    .\run.ps1 10 -Sim -Goal 9,2   # lab maze, goal = row 9, column 2 (cells written as in the map file)
     .\run.ps1 10 -Sim -Map 10_AStarPathPlanning\maps\example_20x10.txt -Goal 18,5
     .\run.ps1 10 -Sim --smooth --block 10,0   # anything after the known options goes to the app
     .\run.ps1 sample         # interactive teleop demo (KobukiNativeVS)

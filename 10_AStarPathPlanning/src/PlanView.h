@@ -119,15 +119,16 @@ inline void drawGrid(Canvas& c, const PlanScene& s, const GridView& g) {
     c.frame(g.ox - 1, g.oy - 1, g.ox + m.cols() * g.px + 2, g.oy + m.rows() * g.px + 2, ColMuted);
 
     // Column / row numbers (every one if there is room, else every 5th).
-    const int step = g.px >= 16 ? 1 : (g.px >= 7 ? 5 : 10);
+    // Numbered like the map file ("coords": counting from 0 or 1).
+    const int step = g.px >= 16 ? 1 : (g.px >= 7 ? 5 : 10), base = m.coords.base;
     wchar_t buf[16];
     for (int x = 0; x < m.cols(); x += step) {
-        swprintf(buf, 16, L"%d", x);
-        c.text(g.ox + x * g.px + g.px / 2 - (x >= 10 ? 7 : 4), g.oy - 20, buf, ColMuted);
+        swprintf(buf, 16, L"%d", x + base);
+        c.text(g.ox + x * g.px + g.px / 2 - (x + base >= 10 ? 7 : 4), g.oy - 20, buf, ColMuted);
     }
     for (int y = 0; y < m.rows(); y += step) {
-        swprintf(buf, 16, L"%d", y);
-        c.text(g.ox - (y >= 10 ? 22 : 14), g.oy + y * g.px + g.px / 2 - 9, buf, ColMuted);
+        swprintf(buf, 16, L"%d", y + base);
+        c.text(g.ox - (y + base >= 10 ? 22 : 14), g.oy + y * g.px + g.px / 2 - 9, buf, ColMuted);
     }
 
     // Robot footprint along the route: everything the robot body sweeps.

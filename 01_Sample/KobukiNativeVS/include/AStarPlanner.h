@@ -21,10 +21,16 @@
 // Map file example (10 x 4 cells of 20 cm, start top-left, goal right):
 //   # comment                (also: % comment, // comment)
 //   cell 0.20                cell size in metres (default 0.20)
-//   start 0 0                column row   (or put a * in the grid)
-//   goal  9 2                column row   (or put a G in the grid)
+//   coords col-row 0         how cells are written in this file and shown on
+//                            screen: "col-row 0" (default: column first,
+//                            counting from 0) or e.g. "row-col 1" (row first,
+//                            counting from 1, like a numbered floor grid)
+//   border open              "open" (default): the map is a window onto a
+//                            bigger floor; "wall": the map edge is a wall
+//   start 0 0                start cell   (or put a * in the grid)
+//   goal  9 2                goal cell    (or put a G in the grid)
 //   heading 0                robot's initial heading, degrees (0 = right, 90 = up)
-//   0 0 0 0 0 0 0 0 0 0
+//   * 0 0 0 0 0 0 0 0 0
 //   0 0 0 1 1 0 0 0 0 0      cells separated by spaces, commas - or nothing
 //   0 0 0 1 1 0 0 0 0 0
 //   0 0 0 0 0 0 0 0 0 0
@@ -58,6 +64,23 @@ struct Point {
 };
 
 inline double distance(Point a, Point b) { return std::hypot(b.x - a.x, b.y - a.y); }
+
+// How a map file (and the program's messages) write a cell: which number
+// comes first and where counting starts. Internally a Cell is always
+// {column, row} counted from 0.
+struct CoordStyle {
+    bool rowFirst = false;  // true: (row, column)
+    int base = 0;           // 0 or 1
+
+    std::string text(Cell c) const {
+        const int a = rowFirst ? c.y : c.x, b = rowFirst ? c.x : c.y;
+        return "(" + std::to_string(a + base) + "," + std::to_string(b + base) + ")";
+    }
+    Cell fromUser(int a, int b) const {
+        return rowFirst ? Cell{ b - base, a - base } : Cell{ a - base, b - base };
+    }
+    std::string order() const { return rowFirst ? "row,column" : "column,row"; }
+};
 
 // ------------------------------------------------------------------ map --
 class GridMap {
@@ -100,6 +123,8 @@ public:
     std::optional<Cell> start, goal;
     std::optional<double> headingDeg;
     std::string name;
+    CoordStyle coords;          // "coords" line
+    bool walledBorder = false;  // "border wall"
 
 private:
     int cols_ = 0, rows_ = 0;
@@ -149,6 +174,7 @@ inline bool parseMap(std::istream& in, GridMap& map, std::string& error) {
     std::vector<std::string> rows;
     std::optional<Cell> gridStart, gridGoal;
     std::optional<double> cellSize;
+    std::optional<std::pair<int, int>> rawStart, rawGoal;   // as written; converted once "coords" is known
     std::string line;
     int lineNo = 0;
 
@@ -177,6 +203,28 @@ inline bool parseMap(std::istream& in, GridMap& map, std::string& error) {
                 map.name = detail::trim(line.substr(end));
                 continue;
             }
+            if (key == "coords" || key == "coordinates") {
+                // "row-col 1", "row,col 1", "rowcol1", "col-row 0", ...
+                std::string t = detail::lower(line.substr(end)), letters, digits;
+                for (char ch : t) {
+                    if (std::isalpha(static_cast<unsigned char>(ch))) letters.push_back(ch);
+                    else if (std::isdigit(static_cast<unsigned char>(ch))) digits.push_back(ch);
+                }
+                if (letters == "rowcol" || letters == "rowcolumn") map.coords.rowFirst = true;
+                else if (letters == "colrow" || letters == "columnrow") map.coords.rowFirst = false;
+                else return fail("'coords' needs an order: row-col or col-row (then 0 or 1), e.g. coords row-col 1");
+                if (digits.empty() || digits == "0") map.coords.base = 0;
+                else if (digits == "1") map.coords.base = 1;
+                else return fail("'coords' counting must start from 0 or 1");
+                continue;
+            }
+            if (key == "border") {
+                const std::string t = detail::trim(detail::lower(line.substr(end)));
+                if (t == "wall" || t == "walled" || t == "closed") map.walledBorder = true;
+                else if (t == "open" || t == "none") map.walledBorder = false;
+                else return fail("'border' must be 'wall' or 'open'");
+                continue;
+            }
             bool ok = true;
             const std::vector<double> v = detail::numbers(line.substr(end), ok);
             if (!ok) return fail("cannot read the numbers after '" + key + "'");
@@ -185,14 +233,13 @@ inline bool parseMap(std::istream& in, GridMap& map, std::string& error) {
                 cellSize = v[0];
             } else if (key == "start" || key == "goal") {
                 if (v.size() != 2 || v[0] != std::floor(v[0]) || v[1] != std::floor(v[1]))
-                    return fail("'" + key + "' needs a column and a row (whole numbers), e.g. " + key + " 0 0");
-                const Cell c{ static_cast<int>(v[0]), static_cast<int>(v[1]) };
-                (key == "start" ? map.start : map.goal) = c;
+                    return fail("'" + key + "' needs two whole numbers (see 'coords'), e.g. " + key + " 0 0");
+                (key == "start" ? rawStart : rawGoal) = std::pair{ static_cast<int>(v[0]), static_cast<int>(v[1]) };
             } else if (key == "heading") {
                 if (v.size() != 1) return fail("'heading' needs one angle in degrees (0 = right, 90 = up)");
                 map.headingDeg = v[0];
             } else {
-                return fail("unknown keyword '" + key + "' (known: cell, start, goal, heading, name)");
+                return fail("unknown keyword '" + key + "' (known: cell, coords, border, start, goal, heading, name)");
             }
             continue;
         }
@@ -226,8 +273,12 @@ inline bool parseMap(std::istream& in, GridMap& map, std::string& error) {
     for (int y = 0; y < m.rows(); ++y)
         for (int x = 0; x < m.cols(); ++x)
             m.setOccupied({ x, y }, rows[static_cast<std::size_t>(y)][static_cast<std::size_t>(x)] == '1');
-    m.start = map.start ? map.start : gridStart;   // keyword lines win over * / G in the grid
-    m.goal = map.goal ? map.goal : gridGoal;
+    m.coords = map.coords;
+    m.walledBorder = map.walledBorder;
+    if (rawStart) m.start = m.coords.fromUser(rawStart->first, rawStart->second);   // keyword lines win
+    else m.start = gridStart;                                                         // over * / G in the grid
+    if (rawGoal) m.goal = m.coords.fromUser(rawGoal->first, rawGoal->second);
+    else m.goal = gridGoal;
     m.headingDeg = map.headingDeg;
     m.name = map.name;
     map = std::move(m);

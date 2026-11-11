@@ -1,0 +1,37 @@
+# Laboratuvar labirenti (fotograftaki 8 sutun x 11 satirlik izgara).
+# Koordinatlar fotograftaki gibi: (satir, sutun), 1'den baslar.
+#   satir 1 = kapiya yakin ust kenar, satir 11 = alt kenar
+#   sutun 1 = sol kenar,              sutun 8 = sagdaki uzun beyaz panel
+# 0 = bos, 1 = engel, * = robotun baslangic hucresi (1,7)
+#
+# Engeller (fotograftan):
+#   sutun 8, satir 1-11 : sagdaki uzun beyaz panel
+#   sutun 7, satir 2-4  : dikey ahsap levha
+#   satir 3, sutun 5-7  : yatay beyaz levha
+#   satir 5, sutun 1-3  : yatay beyaz levha
+#   satir 7, sutun 5-6  : iki turuncu minder
+# Alanin dort yani kapali: "border wall" (robot kenara 15 cm'den yaklasmaz).
+# Hedef (goal) varsayilan (11,4); calistirirken -Goal satir,sutun ile degistirin.
+# Not: soldaki tahtalar fotografta 1. sutunun icine ~9 cm giriyor gibi; oyleyse
+# 1. sutundan gecen yollarda Kobuki tahtaya surtebilir - zeminde kontrol edin.
+#
+# !! HUCRE BOYU fotograftan TAHMIN edildi (Kobuki ~77 px, hucre ~94 px ->
+# ~43 cm). Bir hucreyi (iki kirmizi cizgi arasini) zeminde olcup asagidaki
+# "cell" degerini duzeltin.
+name lab
+cell 0.43
+coords row-col 1
+border wall
+goal 11 4
+heading 270
+0 0 0 0 0 0 * 1
+0 0 0 0 0 0 1 1
+0 0 0 0 1 1 1 1
+0 0 0 0 0 0 1 1
+1 1 1 0 0 0 0 1
+0 0 0 0 0 0 0 1
+0 0 0 0 1 1 0 1
+0 0 0 0 0 0 0 1
+0 0 0 0 0 0 0 1
+0 0 0 0 0 0 0 1
+0 0 0 0 0 0 0 1
