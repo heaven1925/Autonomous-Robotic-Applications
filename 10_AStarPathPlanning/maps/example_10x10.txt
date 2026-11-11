@@ -1,0 +1,19 @@
+# Hocanin ornegi: 10 x 10 hucre, her hucre 20 cm -> 2 m x 2 m.
+# 1 = engel. Satir 1-2, sutun 3-4: 40 cm x 40 cm'lik bir kutu.
+# Robot (0,0)'da, hedef kutunun arkasinda. Robot yaricapi 15 cm oldugu icin
+# kutunun ust kenari ile harita kenari arasindaki tek hucrelik bosluktan
+# gecemez: A* kutunun altindan dolasir.
+cell 0.20
+start 0 0
+goal 9 2
+heading 0
+0 0 0 0 0 0 0 0 0 0
+0 0 0 1 1 0 0 0 0 0
+0 0 0 1 1 0 0 0 0 0
+0 0 0 0 0 0 0 0 0 0
+0 0 0 0 0 0 0 0 0 0
+0 0 0 0 0 0 0 0 0 0
+0 0 0 0 0 0 0 0 0 0
+0 0 0 0 0 0 0 0 0 0
+0 0 0 0 0 0 0 0 0 0
+0 0 0 0 0 0 0 0 0 0

@@ -1,0 +1,15 @@
+# Gercek robotla ILK deneme: engelsiz 1.2 m x 0.8 m alan (6 x 4 hucre, 20 cm).
+# Robot (0,0)'da saga bakarak baslar: 45 derece saga donup (3,3)'e 85 cm
+# capraz gider, sonra 45 derece sola donup (5,3)'e 40 cm duz gider (A* yolu).
+# 4 komsulu denemek icin --4: once 1 m saga, sonra 90 derece donup 60 cm asagi.
+# Zeminde (0,0) hucresinin merkezini ve (5,3) hucresinin merkezini isaretleyin;
+# robot durdugunda hedef isaretine olan uzakligi olcun.
+name first_test
+cell 0.20
+start 0 0
+goal 5 3
+heading 0
+0 0 0 0 0 0
+0 0 0 0 0 0
+0 0 0 0 0 0
+0 0 0 0 0 0

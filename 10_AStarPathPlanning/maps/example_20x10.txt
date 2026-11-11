@@ -1,0 +1,19 @@
+# Hocanin ikinci ornegi: robot (0,0)'da, hedef (18,5).
+# 20 x 10 hucre, her hucre 20 cm -> 4 m x 2 m. 1 = engel:
+#   sutun 3-4, satir 0-2 : 40 cm genis bir engel (ust kenara yapisik)
+#   sutun 9-10, satir 4-9: 40 cm genis bir duvar (alt kenara yapisik)
+#   sutun 14-15, satir 1-6: 40 cm x 120 cm bir engel
+cell 0.20
+start 0 0
+goal 18 5
+heading 0
+0 0 0 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+0 0 0 1 1 0 0 0 0 0 0 0 0 0 1 1 0 0 0 0
+0 0 0 1 1 0 0 0 0 0 0 0 0 0 1 1 0 0 0 0
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 0 0 0 0
+0 0 0 0 0 0 0 0 0 1 1 0 0 0 1 1 0 0 0 0
+0 0 0 0 0 0 0 0 0 1 1 0 0 0 1 1 0 0 0 0
+0 0 0 0 0 0 0 0 0 1 1 0 0 0 1 1 0 0 0 0
+0 0 0 0 0 0 0 0 0 1 1 0 0 0 0 0 0 0 0 0
+0 0 0 0 0 0 0 0 0 1 1 0 0 0 0 0 0 0 0 0
+0 0 0 0 0 0 0 0 0 1 1 0 0 0 0 0 0 0 0 0

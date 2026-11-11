@@ -19,3 +19,6 @@ build/
 
 # Maps saved by the Mapping example
 09_Mapping/output/
+
+# Plans / runs saved by the A* example
+10_AStarPathPlanning/output/

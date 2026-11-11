@@ -16,10 +16,16 @@
     .\run.ps1 9              # Mapping: autonomous occupancy-grid mapper (3x HC-SR04 via Arduino + Kobuki)
     .\run.ps1 9 -Sim         # Mapping in its built-in simulator (no hardware needed)
     .\run.ps1 9 -Manual      # Mapping while you drive the robot from the keyboard (also with -Sim)
+    .\run.ps1 10             # AStar: plan on maps\assignment.txt and drive the real Kobuki
+    .\run.ps1 10 -Sim        # AStar in its built-in simulator (no hardware needed)
+    .\run.ps1 10 -PlanOnly   # AStar: only plan, show and save the path (no robot)
+    .\run.ps1 10 -Sim -Map 10_AStarPathPlanning\maps\example_20x10.txt -Goal 18,5
+    .\run.ps1 10 -Sim --smooth --block 10,0   # anything after the known options goes to the app
     .\run.ps1 sample         # interactive teleop demo (KobukiNativeVS)
     .\run.ps1 stop           # just stop whatever is running
     .\run.ps1 2 -Port COM4   # override auto-detected Kobuki port
     .\run.ps1 6 -Port COM6 -ArduinoPort COM8   # sensor apps (6/7/8/9): override both ports
+    .\run.ps1 10 -Port COM6                    # AStar needs only the Kobuki port
     .\run.ps1 1 -NoBuild     # skip build, run last built exe
 #>
 [CmdletBinding()]
@@ -45,7 +51,19 @@ param(
     [switch]$SensorTest,
 
     # Drive the robot from the keyboard while the map is built (Mapping only).
-    [switch]$Manual
+    [switch]$Manual,
+
+    # AStar only: map file (0/1 text grid), start / goal cell as column,row.
+    [string]$Map,
+    [string[]]$Start,
+    [string[]]$Goal,
+
+    # AStar only: plan, show and save the path without any robot.
+    [switch]$PlanOnly,
+
+    # Everything else (e.g. --smooth, --radius 0.18) is passed to the app.
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$Rest
 )
 
 $ErrorActionPreference = "Stop"
@@ -60,6 +78,7 @@ $numericOverrides = @{
     "7" = "Bug0"
     "8" = "TangentBug"
     "9" = "Mapping"
+    "10" = "AStar"
 }
 $aliases = @{
     "sample"       = "KobukiNativeVS"
@@ -71,6 +90,8 @@ $aliases = @{
     "tangentbug"   = "TangentBug"
     "map"          = "Mapping"
     "mapping"      = "Mapping"
+    "astar"        = "AStar"
+    "path"         = "AStar"
 }
 if ($numericOverrides.ContainsKey($Target)) { $Target = $numericOverrides[$Target] }
 elseif ($Target -match '^\d+$') { $Target = "Example{0:D2}" -f [int]$Target }
@@ -81,7 +102,7 @@ $sensorApps = @("FollowTheGap", "Bug0", "TangentBug", "Mapping")
 $needsArduino = $sensorApps -contains $Target
 
 # Targets with a built-in simulator (run as "<exe> --sim", no COM ports).
-$simApps = @("TangentBug", "Mapping")
+$simApps = @("TangentBug", "Mapping", "AStar")
 if ($Sim -and -not ($simApps -contains $Target)) {
     throw "-Sim is only supported for: $($simApps -join ', ')"
 }
@@ -96,9 +117,21 @@ if ($Manual) {
     if ($Target -ne "Mapping") { throw "-Manual is only supported for: Mapping" }
     $appArgs += "--manual"
 }
+if (($Map -or $Start -or $Goal -or $PlanOnly) -and $Target -ne "AStar") {
+    throw "-Map, -Start, -Goal and -PlanOnly are only supported for: AStar"
+}
+if ($Map) {
+    $mapFile = Resolve-Path -LiteralPath $Map -ErrorAction SilentlyContinue
+    if (-not $mapFile) { $mapFile = Resolve-Path -LiteralPath (Join-Path $root $Map) -ErrorAction SilentlyContinue }
+    if (-not $mapFile) { throw "Map file not found: $Map" }
+    $appArgs += $mapFile.Path
+}
+if ($Start) { $appArgs += "--start"; $appArgs += ($Start -join ",") }
+if ($Goal) { $appArgs += "--goal"; $appArgs += ($Goal -join ",") }
+if ($Rest) { $appArgs += $Rest }
 
 # Every robot app we may have started; killed before each run to free the COM port.
-$knownApps = @("KobukiNativeVS", "Example*", "FollowTheGap", "Bug0", "TangentBug", "Mapping")
+$knownApps = @("KobukiNativeVS", "Example*", "FollowTheGap", "Bug0", "TangentBug", "Mapping", "AStar")
 
 function Stop-RobotApps {
     $stopped = Get-Process -Name $knownApps -ErrorAction SilentlyContinue
@@ -248,6 +281,12 @@ if ($Sim) {
     exit $LASTEXITCODE
 }
 
+if ($PlanOnly) {
+    Write-Host ">> Running: $($exe.FullName) --plan $appArgs`n" -ForegroundColor Cyan
+    & $exe.FullName --plan @appArgs
+    exit $LASTEXITCODE
+}
+
 if ($SensorTest) {
     if (-not $ArduinoPort) {
         $ch340 = @(Get-RobotPorts | Where-Object IsCh340)
@@ -310,7 +349,7 @@ if ($needsArduino) {
     & $exe.FullName $Port $ArduinoPort @appArgs
 }
 else {
-    Write-Host ">> Running: $($exe.FullName) $Port`n" -ForegroundColor Cyan
-    & $exe.FullName $Port
+    Write-Host ">> Running: $($exe.FullName) $Port $appArgs`n" -ForegroundColor Cyan
+    & $exe.FullName $Port @appArgs
 }
 exit $LASTEXITCODE
