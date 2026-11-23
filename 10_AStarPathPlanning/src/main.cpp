@@ -254,7 +254,7 @@ void writeGrid(std::ostream& out, const astar::CostMap& cm, const std::vector<Ce
     for (int x = 0; x < m.cols(); ++x) out << (x + base) % 10 << ' ';
     out << "\n";
     for (int y = 0; y < m.rows(); ++y) {
-        out << std::setw(4) << y + base << "  ";
+        out << std::setw(4) << m.coords.rowLabel(y) << "  ";
         for (int x = 0; x < m.cols(); ++x) out << ch[static_cast<std::size_t>(m.index({ x, y }))] << ' ';
         out << "\n";
     }

@@ -127,8 +127,8 @@ inline void drawGrid(Canvas& c, const PlanScene& s, const GridView& g) {
         c.text(g.ox + x * g.px + g.px / 2 - (x + base >= 10 ? 7 : 4), g.oy - 20, buf, ColMuted);
     }
     for (int y = 0; y < m.rows(); y += step) {
-        swprintf(buf, 16, L"%d", y + base);
-        c.text(g.ox - (y + base >= 10 ? 22 : 14), g.oy + y * g.px + g.px / 2 - 9, buf, ColMuted);
+        swprintf(buf, 16, L"%d", m.coords.rowLabel(y));
+        c.text(g.ox - (m.coords.rowLabel(y) >= 10 ? 22 : 14), g.oy + y * g.px + g.px / 2 - 9, buf, ColMuted);
     }
 
     // Robot footprint along the route: everything the robot body sweeps.

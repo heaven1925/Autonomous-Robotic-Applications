@@ -10,10 +10,11 @@
 //           B or has passed it.
 // Legs come from A* corner points, so they are collision free by
 // construction; the follower only has to stay on the line.
+// Used by 10_AStarPathPlanning and 11_ExplorationMapping.
 #pragma once
 
 #include "AStarPlanner.h"
-#include "Robot.h"
+#include "NavCommon.h"
 
 #include <algorithm>
 #include <cmath>

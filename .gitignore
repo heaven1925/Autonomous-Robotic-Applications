@@ -22,3 +22,6 @@ build/
 
 # Plans / runs saved by the A* example
 10_AStarPathPlanning/output/
+
+# Maps saved by the exploration example
+11_ExplorationMapping/output/

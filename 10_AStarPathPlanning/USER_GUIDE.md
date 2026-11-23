@@ -1,6 +1,6 @@
 # A* Yol Planlama — Kullanıcı Kılavuzu (Kobuki, laboratuvar labirenti)
 
-Labirent [maps/lab.txt](maps/lab.txt) dosyasında 0/1 ile tanımlıdır. Program, robot yarıçapı kadar pay bırakarak A* ile en kısa yolu bulur, gösterir, kaydeder ve Kobuki'yi o yolda sürer. Arduino / HC-SR04 gerekmez. Teknik ayrıntılar: [AStar.md](AStar.md).
+Labirent [maps/lab.txt](maps/lab.txt) dosyasında 0/1 ile tanımlıdır. Program, robot yarıçapı kadar pay bırakarak A* ile en kısa yolu bulur, gösterir, kaydeder ve Kobuki'yi o yolda sürer. Arduino / HC-SR04 gerekmez. Teknik ayrıntılar: [AStar.md](AStar.md). Kısa özet ve build/run adımları: [OZET.md](OZET.md).
 
 ## 1. Hızlı başlangıç
 

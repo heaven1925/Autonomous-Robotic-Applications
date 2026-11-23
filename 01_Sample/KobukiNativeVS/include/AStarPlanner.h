@@ -24,7 +24,9 @@
 //   coords col-row 0         how cells are written in this file and shown on
 //                            screen: "col-row 0" (default: column first,
 //                            counting from 0) or e.g. "row-col 1" (row first,
-//                            counting from 1, like a numbered floor grid)
+//                            counting from 1, like a numbered floor grid) or
+//                            "x-y 0" (column first, y counted from the BOTTOM
+//                            line upwards, like a maths plot)
 //   border open              "open" (default): the map is a window onto a
 //                            bigger floor; "wall": the map edge is a wall
 //   start 0 0                start cell   (or put a * in the grid)
@@ -71,15 +73,25 @@ inline double distance(Point a, Point b) { return std::hypot(b.x - a.x, b.y - a.
 struct CoordStyle {
     bool rowFirst = false;  // true: (row, column)
     int base = 0;           // 0 or 1
+    bool yUp = false;       // "x-y": (column, y) with y counted from the BOTTOM line of the file
+    int rows = 0;           // needed for yUp; set by parseMap
+
+    // Number shown for a column / a row (row = Cell::y, 0 = first line of the file).
+    int colLabel(int x) const { return x + base; }
+    int rowLabel(int y) const { return (yUp ? rows - 1 - y : y) + base; }
 
     std::string text(Cell c) const {
-        const int a = rowFirst ? c.y : c.x, b = rowFirst ? c.x : c.y;
-        return "(" + std::to_string(a + base) + "," + std::to_string(b + base) + ")";
+        const int a = rowFirst ? rowLabel(c.y) : colLabel(c.x), b = rowFirst ? colLabel(c.x) : rowLabel(c.y);
+        return "(" + std::to_string(a) + "," + std::to_string(b) + ")";
     }
     Cell fromUser(int a, int b) const {
+        if (yUp) return Cell{ a - base, rows - 1 - (b - base) };
         return rowFirst ? Cell{ b - base, a - base } : Cell{ a - base, b - base };
     }
-    std::string order() const { return rowFirst ? "row,column" : "column,row"; }
+    std::string order() const { return yUp ? "x,y (y up)" : (rowFirst ? "row,column" : "column,row"); }
+    std::string keyword() const {   // as written in a map file
+        return std::string(yUp ? "x-y " : (rowFirst ? "row-col " : "col-row ")) + std::to_string(base);
+    }
 };
 
 // ------------------------------------------------------------------ map --
@@ -210,9 +222,11 @@ inline bool parseMap(std::istream& in, GridMap& map, std::string& error) {
                     if (std::isalpha(static_cast<unsigned char>(ch))) letters.push_back(ch);
                     else if (std::isdigit(static_cast<unsigned char>(ch))) digits.push_back(ch);
                 }
+                map.coords.yUp = false;
                 if (letters == "rowcol" || letters == "rowcolumn") map.coords.rowFirst = true;
                 else if (letters == "colrow" || letters == "columnrow") map.coords.rowFirst = false;
-                else return fail("'coords' needs an order: row-col or col-row (then 0 or 1), e.g. coords row-col 1");
+                else if (letters == "xy") { map.coords.rowFirst = false; map.coords.yUp = true; }
+                else return fail("'coords' needs an order: row-col, col-row or x-y (then 0 or 1), e.g. coords row-col 1");
                 if (digits.empty() || digits == "0") map.coords.base = 0;
                 else if (digits == "1") map.coords.base = 1;
                 else return fail("'coords' counting must start from 0 or 1");
@@ -252,6 +266,7 @@ inline bool parseMap(std::istream& in, GridMap& map, std::string& error) {
             char up = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
             if (up == '*') up = 'S';
             if (up == '/') up = 'G';
+            if (up == '?') up = '0';   // unknown (arena files of 11_ExplorationMapping): no obstacle known
             if (up != '0' && up != '1' && up != 'S' && up != 'G')
                 return fail(std::string("unexpected character '") + ch +
                             "' (cells must be 0 = free, 1 = obstacle, * = start, / = goal)");
@@ -275,6 +290,7 @@ inline bool parseMap(std::istream& in, GridMap& map, std::string& error) {
         for (int x = 0; x < m.cols(); ++x)
             m.setOccupied({ x, y }, rows[static_cast<std::size_t>(y)][static_cast<std::size_t>(x)] == '1');
     m.coords = map.coords;
+    m.coords.rows = m.rows();
     m.walledBorder = map.walledBorder;
     if (rawStart) m.start = m.coords.fromUser(rawStart->first, rawStart->second);   // keyword lines win
     else m.start = gridStart;                                                         // over * and / in the grid

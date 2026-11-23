@@ -21,6 +21,9 @@
     .\run.ps1 10 -PlanOnly   # AStar: only plan, show and save the path (no robot)
     .\run.ps1 10 -Sim -Goal 9,2   # lab maze, goal = row 9, column 2 (cells written as in the map file)
     .\run.ps1 10 -Sim --block 6,6   # anything after the known options goes to the app
+    .\run.ps1 11 -Calibrate  # Explore: sensor calibration (Gaussian sigma(d), P(event|E)) - Arduino only
+    .\run.ps1 11 -Sim        # Explore: Bayesian grid + frontier exploration in the simulator
+    .\run.ps1 11             # Explore with the real Kobuki + Arduino (one front HC-SR04)
     .\run.ps1 sample         # interactive teleop demo (KobukiNativeVS)
     .\run.ps1 stop           # just stop whatever is running
     .\run.ps1 2 -Port COM4   # override auto-detected Kobuki port
@@ -44,7 +47,7 @@ param(
 
     [switch]$ListPorts,
 
-    # Run the app's built-in simulator instead of real hardware (TangentBug, Mapping).
+    # Run the app's built-in simulator instead of real hardware (TangentBug, Mapping, AStar, Explore).
     [switch]$Sim,
 
     # Sensor check with the Arduino only, no Kobuki (TangentBug only).
@@ -52,6 +55,9 @@ param(
 
     # Drive the robot from the keyboard while the map is built (Mapping only).
     [switch]$Manual,
+
+    # Experimental sensor calibration, Arduino only (Explore only; with -Sim in the simulator).
+    [switch]$Calibrate,
 
     # AStar only: map file (0/1 text grid), start / goal cell as column,row.
     [string]$Map,
@@ -79,6 +85,7 @@ $numericOverrides = @{
     "8" = "TangentBug"
     "9" = "Mapping"
     "10" = "AStar"
+    "11" = "Explore"
 }
 $aliases = @{
     "sample"       = "KobukiNativeVS"
@@ -92,17 +99,19 @@ $aliases = @{
     "mapping"      = "Mapping"
     "astar"        = "AStar"
     "path"         = "AStar"
+    "explore"      = "Explore"
+    "exploration"  = "Explore"
 }
 if ($numericOverrides.ContainsKey($Target)) { $Target = $numericOverrides[$Target] }
 elseif ($Target -match '^\d+$') { $Target = "Example{0:D2}" -f [int]$Target }
 elseif ($aliases.ContainsKey($Target.ToLower())) { $Target = $aliases[$Target.ToLower()] }
 
 # Targets that take a second argument: the Arduino sensor COM port.
-$sensorApps = @("FollowTheGap", "Bug0", "TangentBug", "Mapping")
+$sensorApps = @("FollowTheGap", "Bug0", "TangentBug", "Mapping", "Explore")
 $needsArduino = $sensorApps -contains $Target
 
 # Targets with a built-in simulator (run as "<exe> --sim", no COM ports).
-$simApps = @("TangentBug", "Mapping", "AStar")
+$simApps = @("TangentBug", "Mapping", "AStar", "Explore")
 if ($Sim -and -not ($simApps -contains $Target)) {
     throw "-Sim is only supported for: $($simApps -join ', ')"
 }
@@ -116,6 +125,10 @@ $appArgs = @()
 if ($Manual) {
     if ($Target -ne "Mapping") { throw "-Manual is only supported for: Mapping" }
     $appArgs += "--manual"
+}
+if ($Calibrate) {
+    if ($Target -ne "Explore") { throw "-Calibrate is only supported for: Explore" }
+    if ($Sim) { $appArgs += "--calibrate" }   # simulator: "Explore.exe --sim --calibrate"
 }
 if (($Map -or $Start -or $Goal -or $PlanOnly) -and $Target -ne "AStar") {
     throw "-Map, -Start, -Goal and -PlanOnly are only supported for: AStar"
@@ -131,7 +144,7 @@ if ($Goal) { $appArgs += "--goal"; $appArgs += ($Goal -join ",") }
 if ($Rest) { $appArgs += $Rest }
 
 # Every robot app we may have started; killed before each run to free the COM port.
-$knownApps = @("KobukiNativeVS", "Example*", "FollowTheGap", "Bug0", "TangentBug", "Mapping", "AStar")
+$knownApps = @("KobukiNativeVS", "Example*", "FollowTheGap", "Bug0", "TangentBug", "Mapping", "AStar", "Explore")
 
 function Stop-RobotApps {
     $stopped = Get-Process -Name $knownApps -ErrorAction SilentlyContinue
@@ -284,6 +297,22 @@ if ($Sim) {
 if ($PlanOnly) {
     Write-Host ">> Running: $($exe.FullName) --plan $appArgs`n" -ForegroundColor Cyan
     & $exe.FullName --plan @appArgs
+    exit $LASTEXITCODE
+}
+
+if ($Calibrate) {
+    # Arduino only (the robot stands still): "Explore.exe --calibrate <Arduino COM>".
+    if (-not $ArduinoPort) {
+        $ch340 = @(Get-RobotPorts | Where-Object IsCh340)
+        if ($ch340.Count -lt 1) {
+            Write-Host "!! Could not auto-detect the Arduino sensor COM port; use -ArduinoPort COMx." -ForegroundColor Red
+            exit 1
+        }
+        $ArduinoPort = $ch340[0].Port
+        Write-Host ">> Auto-detected Arduino port: $ArduinoPort ($($ch340[0].Name))" -ForegroundColor Green
+    }
+    Write-Host ">> Running: $($exe.FullName) --calibrate $ArduinoPort $appArgs`n" -ForegroundColor Cyan
+    & $exe.FullName --calibrate $ArduinoPort @appArgs
     exit $LASTEXITCODE
 }
 

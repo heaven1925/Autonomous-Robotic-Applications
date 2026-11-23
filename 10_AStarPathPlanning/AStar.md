@@ -74,7 +74,7 @@ Yol, yön değiştirdiği **köşe hücrelerine** indirgenir; robot iki köşe a
 
 ## 4. Sürüş
 
-Kod: [src/PathFollower.h](src/PathFollower.h). Konum Kobuki'nin jiroskopundan (yön) ve tekerlek enkoderlerinden (mesafe) gelir; bunlar haritadaki başlangıç pozuna göre harita çerçevesine çevrilir.
+Kod: [01_Sample/.../PathFollower.h](../01_Sample/KobukiNativeVS/include/PathFollower.h). Konum Kobuki'nin jiroskopundan (yön) ve tekerlek enkoderlerinden (mesafe) gelir; bunlar haritadaki başlangıç pozuna göre harita çerçevesine çevrilir.
 
 1. **Dön:** robot sıradaki köşeye dönük olana kadar yerinde döner (tolerans 3°).
 2. **Git:** o köşeye düz gider. Çizgiden saparsa yönünü düzeltip çizgiye geri döner. Hız 0,15 m/s'dir, köşeye yaklaşınca düşer; 1 cm kala bir sonraki bacağa geçer.
@@ -133,5 +133,5 @@ Resim her çalıştırmada `output/` klasörüne kaydedilir.
 | [01_Sample/.../GdiCanvas.h](../01_Sample/KobukiNativeVS/include/GdiCanvas.h) | Çizim tuvali, pencere, PNG (09 ile ortak) |
 | [src/main.cpp](src/main.cpp) | Argümanlar, doğrulama, plan, sürüş döngüsü, kayıt |
 | [src/Robot.h](src/Robot.h) | Gerçek Kobuki ve simülatör |
-| [src/PathFollower.h](src/PathFollower.h) | Dön-git yol takipçisi |
+| [01_Sample/.../PathFollower.h](../01_Sample/KobukiNativeVS/include/PathFollower.h) | Dön-git yol takipçisi |
 | [src/PlanView.h](src/PlanView.h) | Harita resmi |
