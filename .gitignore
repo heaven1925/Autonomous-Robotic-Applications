@@ -13,3 +13,15 @@ build/
 
 # Editor
 *.user
+
+# Locally downloaded tools (e.g. arduino-cli, fetched via winget/zip fallback)
+.tools/
+
+# Maps saved by the Mapping example
+09_Mapping/output/
+
+# Plans / runs saved by the A* example
+10_AStarPathPlanning/output/
+
+# Maps saved by the exploration example
+11_ExplorationMapping/output/

@@ -1,0 +1,29 @@
+# Laboratuvar labirenti (zemindeki 8 sutun x 11 satirlik kirmizi izgara).
+# Koordinatlar zemindeki numaralar gibi: (satir, sutun), 1'den baslar.
+#   satir 1 = kapiya yakin ust kenar, satir 11 = alt kenar
+#   sutun 1 = sol kenar,              sutun 8 = sagdaki uzun beyaz panel
+#
+# 0 = bos   1 = engel   * = robotun baslangic hucresi   / = hedef hucresi
+#   baslangic (1,7), hedef (9,7)
+#
+# Alanin dort yani kapali: "border wall" (robot kenara 15 cm'den yaklasmaz).
+# Calistirirken baska hedef: -Goal satir,sutun (dosyadaki / yerine gecer).
+#
+# !! HUCRE BOYU fotograftan TAHMIN edildi (~43 cm). Bir hucreyi (iki kirmizi
+# cizgi arasini) zeminde olcup asagidaki "cell" degerini duzeltin.
+name lab
+cell 0.40
+coords row-col 1
+border wall
+heading 270
+1 0 0 0 0 0 * 1
+1 0 0 0 0 0 1 1
+1 0 0 0 1 1 1 1
+1 0 0 0 0 0 1 1
+1 1 1 0 0 0 0 1
+1 0 0 0 0 0 0 1
+1 0 0 0 1 1 0 1
+1 0 0 0 1 0 0 1
+1 0 0 0 0 0 / 1
+1 1 1 1 1 1 1 1
+1 1 1 1 1 1 1 1

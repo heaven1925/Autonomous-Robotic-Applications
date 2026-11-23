@@ -26,7 +26,7 @@
     {
       "id": "target",
       "type": "promptString",
-      "description": "Hedef: 1, 2, 3, 4 ... (ExampleNN) veya sample",
+      "description": "Hedef: 1-4 (ExampleNN), 6 FollowTheGap, 7 Bug0, 8 TangentBug, 9 Mapping, 10 AStar, 11 Explore veya sample",
       "default": "4"
     }
   ]
