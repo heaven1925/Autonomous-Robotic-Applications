@@ -6,9 +6,11 @@
 //   HardwareRobot - real Kobuki (gyro heading + encoder distance, turned into
 //                   the map frame with the start pose) + the Arduino board.
 //   SimRobot      - kinematic simulator: the true map is a 0/1 txt file
-//                   (default: 10_AStarPathPlanning/maps/lab.txt), obstacle
-//                   cells are solid, the sonar is ray-cast with a
+//                   (an obstacle map, obstacleMapReferences/mapN/mapN.txt),
+//                   obstacle cells are solid, the sonar is ray-cast with a
 //                   cone, noise and missed echoes, like the real board.
+//                   The noise comes from a seeded generator: the same seed
+//                   gives the same run (benchmark repeats use seeds 1..N).
 //   SensorBoard   - the Arduino alone (used by the calibration mode).
 #pragma once
 
@@ -81,7 +83,8 @@ public:
 // ------------------------------------------------------- Arduino sensors --
 class SensorBoard {
 public:
-    explicit SensorBoard(std::string port) : port_(std::move(port)) {}
+    // scale: distance calibration (RangeCalibration.h, sensor_calibration.txt), 1 = none.
+    explicit SensorBoard(std::string port, double scale = 1.0) : port_(std::move(port)), scale_(scale) {}
 
     bool open() {
         std::cout << "Opening sensor board on " << port_ << "...\n";
@@ -121,13 +124,18 @@ public:
     void fill(Beam beams[3]) const {
         const auto& r = sensor_.last();
         const double noEcho = sensor_.maxRangeMeters() - 1e-6;   // ArduinoTriSensor maps -1 to its max range
-        beams[0] = { r.leftM, r.leftValid, r.leftM < noEcho };
-        beams[1] = { r.frontM, r.frontValid, r.frontM < noEcho };
-        beams[2] = { r.rightM, r.rightValid, r.rightM < noEcho };
+        const auto beam = [&](double m, bool valid) {
+            const bool echo = m < noEcho;
+            return Beam{ echo ? m * scale_ : m, valid, echo };
+        };
+        beams[0] = beam(r.leftM, r.leftValid);
+        beams[1] = beam(r.frontM, r.frontValid);
+        beams[2] = beam(r.rightM, r.rightValid);
     }
 
 private:
     std::string port_;
+    double scale_ = 1.0;
     bug0::ArduinoTriSensor sensor_{ 4.0 };
     std::size_t lastCount_ = 0;
     std::chrono::steady_clock::time_point lastPacket_;
@@ -136,8 +144,8 @@ private:
 // ------------------------------------------------------------- hardware --
 class HardwareRobot final : public Robot {
 public:
-    HardwareRobot(std::string kobukiPort, std::string arduinoPort, Pose start)
-        : kobukiPort_(std::move(kobukiPort)), sensors_(std::move(arduinoPort)), start_(start) {}
+    HardwareRobot(std::string kobukiPort, std::string arduinoPort, Pose start, double rangeScale = 1.0)
+        : kobukiPort_(std::move(kobukiPort)), sensors_(std::move(arduinoPort), rangeScale), start_(start) {}
 
     const char* name() const override { return "Kobuki + Arduino (HC-SR04)"; }
 
@@ -224,9 +232,11 @@ public:
         bool walledBorder = true;
         bool noise = true;    // distance dependent noise, occasional missed echo / ghost reading
         int speed = 4;        // roughly x real time; 0 = as fast as possible
+        unsigned seed = 2026; // noise generator seed
     };
 
-    SimRobot(astar::GridMap world, Pose start, Options opt) : world_(std::move(world)), pose_(start), opt_(opt) {}
+    SimRobot(astar::GridMap world, Pose start, Options opt)
+        : world_(std::move(world)), pose_(start), opt_(opt), rng_(opt.seed) {}
 
     const char* name() const override { return "built-in simulator"; }
 
@@ -362,7 +372,7 @@ private:
     bool newData_ = false;
     Bumper bumper_ = Bumper::None;
     unsigned sleepCounter_ = 0;
-    std::mt19937 rng_{ 2026 };
+    std::mt19937 rng_;
     std::normal_distribution<double> noise_{ 0.0, 1.0 };
     std::uniform_real_distribution<double> uni_{ 0.0, 1.0 };
 };

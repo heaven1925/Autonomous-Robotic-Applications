@@ -21,9 +21,13 @@
     .\run.ps1 10 -PlanOnly   # AStar: only plan, show and save the path (no robot)
     .\run.ps1 10 -Sim -Goal 9,2   # lab maze, goal = row 9, column 2 (cells written as in the map file)
     .\run.ps1 10 -Sim --block 6,6   # anything after the known options goes to the app
-    .\run.ps1 11 -Calibrate  # Explore: sensor calibration (Gaussian sigma(d), P(event|E)) - Arduino only
-    .\run.ps1 11 -Sim        # Explore: Bayesian grid + frontier exploration in the simulator
-    .\run.ps1 11             # Explore with the real Kobuki + Arduino (one front HC-SR04)
+    .\run.ps1 launcher       # 11: Windows app - pick method, obstacle map, COM ports; benchmark + comparison
+    .\run.ps1 launcher -Config release -Shortcut   # build, start, and put "11 Exploration Launcher" on the desktop
+    .\run.ps1 11 -Calibrate  # 11: sensor calibration (Gaussian sigma(d), P(event|E)) - Arduino only
+    .\run.ps1 11 -Sim        # 11_01 Frontier exploration in the simulator (obstacle map3)
+    .\run.ps1 11 -Algo bfs -Sim -ObstacleMap map2   # 11_02 BFS on map2 (frontier / bfs / random / tsp)
+    .\run.ps1 tsp -Sim -ObstacleMap map4             # same as 11 -Algo tsp
+    .\run.ps1 11 -Algo random                        # real Kobuki + Arduino (one front HC-SR04)
     .\run.ps1 sample         # interactive teleop demo (KobukiNativeVS)
     .\run.ps1 stop           # just stop whatever is running
     .\run.ps1 2 -Port COM4   # override auto-detected Kobuki port
@@ -47,7 +51,7 @@ param(
 
     [switch]$ListPorts,
 
-    # Run the app's built-in simulator instead of real hardware (TangentBug, Mapping, AStar, Explore).
+    # Run the app's built-in simulator instead of real hardware (TangentBug, Mapping, AStar, 11 exploration).
     [switch]$Sim,
 
     # Sensor check with the Arduino only, no Kobuki (TangentBug only).
@@ -56,7 +60,7 @@ param(
     # Drive the robot from the keyboard while the map is built (Mapping only).
     [switch]$Manual,
 
-    # Experimental sensor calibration, Arduino only (Explore only; with -Sim in the simulator).
+    # Experimental sensor calibration, Arduino only (11 exploration only; with -Sim in the simulator).
     [switch]$Calibrate,
 
     # AStar only: map file (0/1 text grid), start / goal cell as column,row.
@@ -66,6 +70,15 @@ param(
 
     # AStar only: plan, show and save the path without any robot.
     [switch]$PlanOnly,
+
+    # 11 only: exploration method (frontier, bfs, random, tsp) and obstacle map
+    # (map1..map4 from 11_ExplorationMapping\obstacleMapReferences, or a txt path).
+    [ValidateSet("frontier", "bfs", "random", "tsp")]
+    [string]$Algo,
+    [string]$ObstacleMap,
+
+    # launcher only: also create a desktop shortcut to the built ExploreLauncher.exe.
+    [switch]$Shortcut,
 
     # Everything else (e.g. --smooth, --radius 0.18) is passed to the app.
     [Parameter(ValueFromRemainingArguments = $true)]
@@ -85,7 +98,7 @@ $numericOverrides = @{
     "8" = "TangentBug"
     "9" = "Mapping"
     "10" = "AStar"
-    "11" = "Explore"
+    "11" = "Explore_Frontier"
 }
 $aliases = @{
     "sample"       = "KobukiNativeVS"
@@ -99,19 +112,32 @@ $aliases = @{
     "mapping"      = "Mapping"
     "astar"        = "AStar"
     "path"         = "AStar"
-    "explore"      = "Explore"
-    "exploration"  = "Explore"
+    "explore"      = "Explore_Frontier"
+    "exploration"  = "Explore_Frontier"
+    "frontier"     = "Explore_Frontier"
+    "bfs"          = "Explore_BFS"
+    "random"       = "Explore_Random"
+    "tsp"          = "Explore_TSP"
+    "launcher"     = "ExploreLauncher"
+    "ui"           = "ExploreLauncher"
 }
 if ($numericOverrides.ContainsKey($Target)) { $Target = $numericOverrides[$Target] }
 elseif ($Target -match '^\d+$') { $Target = "Example{0:D2}" -f [int]$Target }
 elseif ($aliases.ContainsKey($Target.ToLower())) { $Target = $aliases[$Target.ToLower()] }
 
+# 11: the exploration method picks the program (Explore_Frontier, _BFS, _Random, _TSP).
+$exploreApps = @("Explore_Frontier", "Explore_BFS", "Explore_Random", "Explore_TSP")
+if ($Algo) {
+    if (-not ($exploreApps -contains $Target)) { throw "-Algo is only supported for 11 (exploration)" }
+    $Target = @{ frontier = "Explore_Frontier"; bfs = "Explore_BFS"; random = "Explore_Random"; tsp = "Explore_TSP" }[$Algo]
+}
+
 # Targets that take a second argument: the Arduino sensor COM port.
-$sensorApps = @("FollowTheGap", "Bug0", "TangentBug", "Mapping", "Explore")
+$sensorApps = @("FollowTheGap", "Bug0", "TangentBug", "Mapping") + $exploreApps
 $needsArduino = $sensorApps -contains $Target
 
 # Targets with a built-in simulator (run as "<exe> --sim", no COM ports).
-$simApps = @("TangentBug", "Mapping", "AStar", "Explore")
+$simApps = @("TangentBug", "Mapping", "AStar") + $exploreApps
 if ($Sim -and -not ($simApps -contains $Target)) {
     throw "-Sim is only supported for: $($simApps -join ', ')"
 }
@@ -127,8 +153,8 @@ if ($Manual) {
     $appArgs += "--manual"
 }
 if ($Calibrate) {
-    if ($Target -ne "Explore") { throw "-Calibrate is only supported for: Explore" }
-    if ($Sim) { $appArgs += "--calibrate" }   # simulator: "Explore.exe --sim --calibrate"
+    if (-not ($exploreApps -contains $Target)) { throw "-Calibrate is only supported for: 11 (exploration)" }
+    if ($Sim) { $appArgs += "--calibrate" }   # simulator: "Explore_<X>.exe --sim --calibrate"
 }
 if (($Map -or $Start -or $Goal -or $PlanOnly) -and $Target -ne "AStar") {
     throw "-Map, -Start, -Goal and -PlanOnly are only supported for: AStar"
@@ -141,10 +167,18 @@ if ($Map) {
 }
 if ($Start) { $appArgs += "--start"; $appArgs += ($Start -join ",") }
 if ($Goal) { $appArgs += "--goal"; $appArgs += ($Goal -join ",") }
+if ($ObstacleMap) {
+    if (-not ($exploreApps -contains $Target)) { throw "-ObstacleMap is only supported for: 11 (exploration)" }
+    $obstacleFile = Join-Path $root "11_ExplorationMapping\obstacleMapReferences\$ObstacleMap\$ObstacleMap.txt"
+    if (-not (Test-Path $obstacleFile)) { $obstacleFile = (Resolve-Path -LiteralPath $ObstacleMap -ErrorAction SilentlyContinue).Path }
+    if (-not $obstacleFile) { throw "Obstacle map not found: $ObstacleMap (map1..map4 or a txt path)" }
+    $appArgs += "--map"; $appArgs += "$obstacleFile"
+}
 if ($Rest) { $appArgs += $Rest }
 
 # Every robot app we may have started; killed before each run to free the COM port.
-$knownApps = @("KobukiNativeVS", "Example*", "FollowTheGap", "Bug0", "TangentBug", "Mapping", "AStar", "Explore")
+# (ExploreLauncher is not in the list: it only starts these programs.)
+$knownApps = @("KobukiNativeVS", "Example*", "FollowTheGap", "Bug0", "TangentBug", "Mapping", "AStar", "Explore_*")
 
 function Stop-RobotApps {
     $stopped = Get-Process -Name $knownApps -ErrorAction SilentlyContinue
@@ -288,6 +322,22 @@ $exe = Find-TargetExe
 if (-not $exe) { throw "$Target.exe not found. Build it in CLion first, or install Visual Studio Build Tools so this script can build it." }
 
 # --- 3. Determine COM port(s) ---
+if ($Target -eq "ExploreLauncher") {   # Windows app: chooses the ports itself
+    if ($Shortcut) {
+        $lnk = Join-Path ([Environment]::GetFolderPath("Desktop")) "11 Exploration Launcher.lnk"
+        $shell = New-Object -ComObject WScript.Shell
+        $sc = $shell.CreateShortcut($lnk)
+        $sc.TargetPath = $exe.FullName
+        $sc.WorkingDirectory = $exe.DirectoryName
+        $sc.Description = "11 Exploration Mapping - ExploreLauncher"
+        $sc.Save()
+        Write-Host ">> Desktop shortcut: $lnk" -ForegroundColor Green
+    }
+    Write-Host ">> Starting: $($exe.FullName)" -ForegroundColor Cyan
+    Start-Process -FilePath $exe.FullName
+    exit 0
+}
+
 if ($Sim) {
     Write-Host ">> Running: $($exe.FullName) --sim $appArgs`n" -ForegroundColor Cyan
     & $exe.FullName --sim @appArgs
@@ -301,7 +351,7 @@ if ($PlanOnly) {
 }
 
 if ($Calibrate) {
-    # Arduino only (the robot stands still): "Explore.exe --calibrate <Arduino COM>".
+    # Arduino only (the robot stands still): "Explore_<X>.exe --calibrate <Arduino COM>".
     if (-not $ArduinoPort) {
         $ch340 = @(Get-RobotPorts | Where-Object IsCh340)
         if ($ch340.Count -lt 1) {

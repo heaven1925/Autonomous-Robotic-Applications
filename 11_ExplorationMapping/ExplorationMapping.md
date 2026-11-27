@@ -1,20 +1,21 @@
-# Örnek 11: Exploration Mapping (Gaussian + Bayes doluluk ızgarası, frontier keşfi)
+# Örnek 11: Exploration Mapping (Gaussian + Bayes doluluk ızgarası) — ortak teknik ayrıntı
 
-Kobuki, laboratuvar zeminindeki 7 × 9 hücrelik alanı (40 cm hücreler, başlangıç (1,1)) **haritayı bilmeden** dolaşır. Güncel durum: [README.md](README.md).
-- **Sensör:** robotun önünde **tek** bir HC-SR04 var; robot her durakta yerinde 360° dönerek ölçer.
-- **Güncelleme:** her hücrenin P(Dolu) olasılığı Bayes kuralıyla güncellenir. Ölçüm olasılıkları Gauss gürültü modelinden (Method B) ve deneyden (Method A) gelir.
-- **Sonuç:** frontier'lara A* ile gidilir; sonunda harita 10_AStarPathPlanning'in okuduğu 0/1 txt olarak kaydedilir.
+Kobuki, laboratuvar zeminindeki 7 × 9 hücrelik alanı (40 cm hücreler, başlangıç (1,1)) **haritayı bilmeden** dolaşır. Güncel durum ve yöntem karşılaştırması: [README.md](README.md).
+- **Sensör:** Robotun önünde **tek** bir HC-SR04 var. Robot yerinde 360° dönerek ya da bir hücreye karşıdan bakarak ölçer.
+- **Güncelleme:** Her hücrenin P(Dolu) olasılığı Bayes kuralıyla güncellenir. Ölçüm olasılıkları Gauss gürültü modelinden (Method B) ve deneyden (Method A) gelir.
+- **Hareket:** Sıradaki hareketi dört yöntemden biri seçer: [11_01 Frontier](11_01_Frontier/README.md), [11_02 BFS](11_02_BFS/README.md), [11_03 Random](11_03_Random/README.md), [11_04 TSP](11_04_TSP/README.md).
+- **Sonuç:** Harita sonunda 10_AStarPathPlanning'in okuduğu 0/1 txt olarak kaydedilir.
 
-Kullanım: [USER_GUIDE.md](USER_GUIDE.md).
+Bu belge dört yöntemin **ortak** kısmını anlatır: sensör modeli, Bayes güncellemesi, kalibrasyon, keşif döngüsü ve metrikler (`common/`). Kullanım: [USER_GUIDE.md](USER_GUIDE.md).
 
 ## 1. Algoritma (ders notu)
 
-| Adım | Uygulamada |
-|---|---|
-| 1. Initialize grid | Her hücre P(Dolu) = 0,5. |
-| 2. Update the grid | Robotun hücresi boş işaretlenir. Her sonar ölçümü Bayes kuralıyla hücreleri günceller. |
-| 3. Pick a next move | Frontier = karar verilmemiş ve boş komşusu olan hücre. Boş komşusuna giden A* yolu en kısa olan frontier seçilir. Robot oraya gider, **frontier'a döner ve tekrar ölçer**; hâlâ kararsızsa 360° döner. |
-| 4. Loop | Tüm hücreler P < 0,3 (boş) ya da P > 0,8 (dolu) olunca biter. Hiç görülemeyen hücreler kalırsa ulaşılabilir hedef bitince durur. |
+| Adım | Uygulamada | Kod |
+|---|---|---|
+| 1. Initialize grid | Her hücre P(Dolu) = 0,5. | `BayesGrid` (ortak) |
+| 2. Update the grid | Robotun hücresi boş işaretlenir. Her sonar ölçümü Bayes kuralıyla hücreleri günceller. | `Explorer::observe`, `BayesGrid::integrate` (ortak) |
+| 3. Pick a next move | **Yönteme göre değişir:** en yakın frontier / BFS sırası / rastgele hücre / TSP turu. Ölçülecek hücreye dönülür ve **karşıdan ölçülür**; hâlâ kararsızsa 360° dönülür (Random: hedefte 360° tarama). | `Strategy::next` (her yöntemin klasöründe) |
+| 4. Loop | Tüm hücreler P < 0,3 (boş) ya da P > 0,8 (dolu) olunca ya da yöntemin hedefi kalmayınca biter. Ardından doğrulama yapılır. Hiç görülemeyen hücreler kararsız kalır. | `Explorer` (ortak) |
 
 **Bayes güncelleme kuralı:**
 
@@ -59,7 +60,15 @@ Yani tek bir ölçüm hücreyi eşiklerin sınırına getirir; karar için birka
 
 ## 3. Kalibrasyon (`.\run.ps1 11 -Calibrate`)
 
-Yalnızca Arduino gerekir; robot sabit durur. Robot hücre ortasında ve ızgaraya dik bakar.
+**Önce mesafe ölçeği (launcher, 3. adım):**
+- 40 × 40 cm blok, sensörün ön yüzünden tam 40 cm uzağa konur.
+- Yankılı 50 ölçüm alınır; medyandan 3 cm'den uzak olanlar atılır.
+- Kalanlardan ölçek bulunur: ölçek = 40 / ortalama ham cm. Ham cm = yankı süresi (µs) × 0,01715 (343 m/s varsayılır).
+- Tek nokta tek parametre verir. HC-SR04'ün asıl hatası ses hızından (sıcaklıktan) gelen bir ölçek hatası olduğu için bu nokta ölçeğe kullanılır.
+- Sonuç `sensor_calibration.txt` dosyasına yazılır ([common/RangeCalibration.h](common/RangeCalibration.h)).
+- Gerçek robotta `SensorBoard` her yankılı okumayı bu ölçekle çarpar. Aşağıdaki Gauss modeli bu ölçeklenmiş okumalarla ölçülür.
+
+Gauss modeli için yalnızca Arduino gerekir; robot sabit durur. Robot hücre ortasında ve ızgaraya dik bakar.
 
 1. **Method B:** kutu sırayla 1, 2, 3, 5, 10 hücre öteye konur. 10 hücre, robot merkezinden yaklaşık 4 m demektir. Her konumda 100 ölçüm alınır ve şunlar hesaplanır:
    - ortalama (bias);
@@ -74,7 +83,7 @@ Simülatörde (`.\run.ps1 11 -Sim -Calibrate`) ölçülenler: σ, 0,5 m'de 1,3 c
 
 ## 4. Ölçümün hücrelere işlenmesi
 
-Kod: [src/BayesGrid.h](src/BayesGrid.h), [src/Explorer.h](src/Explorer.h).
+Kod: [common/BayesGrid.h](common/BayesGrid.h), [common/Explorer.h](common/Explorer.h).
 
 **a) Karşıdan ölçüm.** Robot hedefin komşusunda durup ona dönünce düzen kalibrasyonla aynıdır. Her okuma doğrudan olaydır:
 - **isabet:** P(z|O) Gauss'tan hedefin mesafesinde, P(z|E) deneyden;
@@ -95,25 +104,64 @@ Ek kurallar:
 - **Sığ açı:** ışın bir hücreye yüzüne 50°'den sığ açıyla giriyorsa (`grazingDeg`) o hücre duvar olsa bile yankı vermeyebilir; ışın orada durur, o hücre ve arkası "geçti" sayılmaz.
 - Aynı sensör okuması ancak robot 6° döndüyse, 4 cm ilerlediyse ya da 2 s geçtiyse yeniden işlenir.
 
-## 5. Keşif adımları
+## 5. Keşif döngüsü (ortak) ve Strategy arayüzü
+
+Kod: [common/Explorer.h](common/Explorer.h), [common/Strategy.h](common/Strategy.h).
 
 1. Başlangıçta yerinde 360° tarama.
-2. En yakın frontier'ın boş komşusuna A* ile git. Yalnızca boş bilinen hücrelerden geçilir. Frontier'a dön, karşıdan ölç; hâlâ kararsızsa 360° tara.
-3. Ulaşılabilir frontier kalmayınca **doğrulama:** boş alana komşu, henüz karşıdan ölçülmemiş dolu hücreleri karşıdan ölç. Yanlış "dolu" bir hücre arkasında keşfedilecek yer saklayabilir. `--no-verify` ile kapatılır.
-4. Tüm hücreler karar verilince ya da ulaşılabilir hedef kalmayınca dur ve haritayı kaydet.
-5. **Çarpma:** bilinen engelse konum düzeltilir; bilinmeyen bir şeyse o hücre doğrudan dolu (P ≥ 0,90) işaretlenir. Ardından robot 10 cm geri çekilir ve yeniden planlar. Uçurum sinyali ya da sensör akışı 1,5 s'den uzun kesilirse durur.
+2. **Plan:** Explorer, yönteme bir `PlanContext` verir:
+   - ızgara;
+   - yalnızca boş bilinen hücrelerin geçilebildiği maliyet haritası;
+   - robotun ve başlangıcın hücresi;
+   - frontier listesi;
+   - vazgeçilen hücreler.
 
-## 6. Çıktı
+   Yöntem bir `Goal` döndürür:
+   - `Measure`: hedef hücre, durulacak komşu ve oraya giden hücre yolu;
+   - `LookAround`: gidilecek hücre, orada 360° tarama.
+3. **Sürüş:** Yolun köşe hücreleri `PathFollower` ile önce yerinde dönülerek, sonra düz gidilerek sürülür. Yol üzerindeki bir hücre yeni ölçümle boş olmaktan çıkarsa yeniden planlanır.
+4. **Ölçüm:** `Measure` hedefine dönülür ve karşıdan ölçülür. En az 3, en çok 12 okuma alınır (kalibrasyon düzeniyle aynı). Hâlâ kararsızsa 360° taranır. `LookAround` hedefinde 360° taranır.
+5. **Vazgeçme:** 3 ziyarette karar verilemeyen hedeften vazgeçilir; yöntem bu hücreyi `givenUp` listesinde görür.
+6. **Yöntem bitince doğrulama:** Boş alana komşu, henüz karşıdan ölçülmemiş dolu hücreler en yakından başlanarak karşıdan ölçülür. Yanlış "dolu" bir hücre arkasında keşfedilecek yer saklayabilir. Bu adım `--no-verify` ile kapatılır. Doğrulama yeni frontier açarsa yöntem yeniden devreye girer.
+7. **Bitiş:**
+   - Tüm hücreler karar verilince ya da ne yöntemin ne doğrulamanın hedefi kalınca durulur ve harita kaydedilir.
+   - Bitiş nedeni: `all_decided`, `no_frontier`, `stagnated` (Random) ya da `time_limit` / `too_many_bumps`.
+8. **Çarpma:** Bilinen engelse konum düzeltilir. Bilinmeyen bir şeyse o hücre doğrudan dolu (P ≥ 0,90) işaretlenir. Ardından robot 10 cm geri çekilir ve yeniden planlar. Uçurum sinyali ya da sensör akışı 1,5 s'den uzun kesilirse robot durur.
 
-- `output/explored_<zaman>.txt`: 10'un harita biçimi. 0 = boş, 1 = dolu ya da kararsız, `*` = başlangıç. Hedefe `/` yazıp `.\run.ps1 10 -Map ...` ile A* çalıştırılır.
-- `output/explored_<zaman>_prob.txt`: her hücrenin P(Dolu) değeri.
-- `output/explored_<zaman>.png`: pencere resmi.
+Ortak yardımcılar (Strategy.h):
+- `routeAStar` (8 komşu, köşe kesmeden);
+- `routeBfs` (4 komşu, en az hücre);
+- `nearestTarget` / `rankTargets`: her hedef için A* yolu en kısa boş komşu.
+
+## 6. Çıktı ve metrikler
+
+Dosyalar `output/<yöntem>/` klasörüne yazılır:
+- `explored_<yöntem>_<harita>_s<seed>_<zaman>.txt`: 10'un harita biçimi. 0 = boş, 1 = dolu ya da kararsız, `*` = başlangıç. Hedefe `/` yazıp `.\run.ps1 10 -Map ...` ile A* çalıştırılır.
+- `..._prob.txt`: her hücrenin P(Dolu) değeri.
+- `....png`: pencere resmi.
+- `results/results.csv`: her koşuya bir satır ([common/Metrics.h](common/Metrics.h)). Sütunlar:
+  - `time_s`, `driven_m`, `finish`, `completed`;
+  - `success_ratio` = `correct_obs / observable`, `accuracy_all`;
+  - `wrong`, `undecided`, `bumps`, `goals` ...
+
+**Görülebilir hücre:** Engel haritasında boş olan, ya da boş bir 4-komşusu olan hücre. Dış köşeler ve kalın duvarın içi hiçbir konumdan görülemez; başarı oranına sayılmaz.
 
 ## 7. Simülasyon sonuçları (tek sensör)
 
-**Güncel alan** ([maps/truth.txt](maps/truth.txt), 7 × 9, başlangıç (1,1)): gürültülü ve gürültüsüz simülasyonda 57 doğru, **0 yanlış**, 6 kararsız (görülemeyen köşeler), ~6 dakika, 0 çarpma.
+**Dört yöntem, dört engel haritası:** [README.md](README.md) §4. Özetle, 48 gürültülü koşuda (seed 1–3):
 
-**Önceki alan** (aşağıdaki tablo): gerçek harita [10_AStarPathPlanning/maps/lab.txt](../10_AStarPathPlanning/maps/lab.txt), başlangıç (1,7). Simülatördeki sensör:
+| Yöntem | Ort. süre | Başarı oranı |
+|---|---:|---:|
+| TSP | 323 s | %100 |
+| Frontier | 330 s | %100 |
+| BFS | 358 s | %100 |
+| Random | 639 s | %98,8 |
+
+**11_01 Frontier, map3** (önceki sürümün sonuçlarıyla birebir aynı, seed 2026):
+- Gürültülü: 376,7 s, 19,0 m, 57 doğru, **0 yanlış**, 6 kararsız (görülemeyen köşeler).
+- Gürültüsüz: 358,5 s, 17,4 m, 0 çarpma.
+
+**Önceki alan** (aşağıdaki tablo, 11_01 Frontier): gerçek harita [10_AStarPathPlanning/maps/lab.txt](../10_AStarPathPlanning/maps/lab.txt), başlangıç (1,7). Simülatördeki sensör:
 - ±12° koni;
 - 55°'den sığ açıyla gelen ışında yankı yok;
 - mesafeyle büyüyen gürültü (4 m'de ~8 cm);
@@ -137,12 +185,19 @@ Gerçek robot denemeleri ve açık sorunlar: [README.md](README.md).
 | Dosya | İçerik |
 |---|---|
 | [maps/arena.txt](maps/arena.txt) | Alan: 7 × 9, 40 cm, `coords x-y 0`, başlangıç `*` (1,1), yön 90°, kenarlar duvar; içerik bilinmiyor (`?`) |
-| [maps/truth.txt](maps/truth.txt) | Yalnızca simülatör: laboratuvarda kurulan alanın gerçek haritası |
-| `sensor_model.txt` | Kalibrasyon sonucu; `-Calibrate` oluşturur |
-| [arduino/sensor/sensor.ino](arduino/sensor/sensor.ino) | Tek HC-SR04 (D11/D12), ham ölçüm, 07/08 ile aynı JSON |
-| [src/BayesGrid.h](src/BayesGrid.h) | Gauss sensör modeli, Bayes kuralı, ışın işleme, frontier |
-| [src/Explorer.h](src/Explorer.h) | 360° tarama, frontier seçimi, A*, karşıdan ölçüm, doğrulama, çarpma |
-| [src/ExploreRobot.h](src/ExploreRobot.h) | Gerçek Kobuki + Arduino, simülatör |
-| [src/ExploreView.h](src/ExploreView.h) | Pencere / PNG |
-| [src/main.cpp](src/main.cpp) | Kalibrasyon, keşif döngüsü, kayıt |
+| [obstacleMapReferences/](obstacleMapReferences/) | map1..map4: görsel + 0/1 txt. Simülatörün dünyası, gerçek koşunun referansı (map3 = önceki `maps/truth.txt`) |
+| `sensor_model.txt` | Kalibrasyon sonucu; `-Calibrate` oluşturur, dört yöntem de kullanır |
+| `sensor_calibration.txt` | 40 cm mesafe ölçeği; launcher 3. adım oluşturur, dört yöntem de gerçek robotta kullanır (`--range-cal`) |
+| [arduino/sensor/sensor.ino](arduino/sensor/sensor.ino) | Tek HC-SR04 (v2: varsayılan D11/D12, `PINS` komutu + EEPROM), ham ölçüm, 07/08 ile aynı JSON + `us` (yankı süresi) |
+| [common/Strategy.h](common/Strategy.h) | Yöntem arayüzü (`next() -> Goal`), ortak yol / hedef yardımcıları |
+| [common/Explorer.h](common/Explorer.h) | Ortak keşif döngüsü: tarama, sürüş, karşıdan ölçüm, doğrulama, çarpma |
+| [common/BayesGrid.h](common/BayesGrid.h) | Gauss sensör modeli, Bayes kuralı, ışın işleme, frontier |
+| [common/ExploreRobot.h](common/ExploreRobot.h) | Gerçek Kobuki + Arduino, simülatör (seed'li gürültü) |
+| [common/ExploreView.h](common/ExploreView.h) | Pencere / PNG, yöntem katmanı, yanlış hücre işareti |
+| [common/Calibration.h](common/Calibration.h) | Kalibrasyon (Method A + B) |
+| [common/RangeCalibration.h](common/RangeCalibration.h) | 40 cm mesafe ölçeği: dosya okuma / yazma |
+| [common/Metrics.h](common/Metrics.h) | Başarı oranı, results.csv |
+| [common/ExploreApp.h](common/ExploreApp.h) | Program gövdesi: seçenekler, döngü, kayıt, özet |
+| `11_0X_*/src/*Strategy.h` | Dört yöntem (her birinin README'si kendi klasöründe) |
+| [Launcher/src/](Launcher/src/) | ExploreLauncher (Windows uygulaması), COM listesi, karşılaştırma / rapor |
 | 01_Sample/.../AStarPlanner.h, PathFollower.h, NavCommon.h | A* ve yol takipçisi (10 ile ortak) |

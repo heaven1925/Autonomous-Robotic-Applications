@@ -1,0 +1,19 @@
+# Engel haritasi map4 (gorsel: map4.png). Laboratuvar alani 7 sutun x 9 satir, 40 cm hucreler.
+# Koordinatlar (x, y), 0'dan: x saga, y YUKARI (alt satir y = 0, ust satir y = 8).
+# 1 = engel (kirmizi), 0 = bos (beyaz), * = baslangic (1,1), robot +y'ye bakar.
+# Ic engel: map3 + (4,1) (5,1) sag alt cikinti.
+# Simulatorde gercek dunya; gercek robotta cikan haritanin karsilastirildigi referans.
+name map4
+cell 0.40
+coords x-y 0
+border wall
+heading 90
+1 1 1 1 1 1 1
+1 0 0 0 0 1 1
+1 0 0 0 0 1 1
+1 0 0 0 0 0 1
+1 1 1 0 0 0 1
+1 0 0 0 0 0 1
+1 0 0 0 0 0 1
+1 * 0 0 1 1 1
+1 1 1 1 1 1 1

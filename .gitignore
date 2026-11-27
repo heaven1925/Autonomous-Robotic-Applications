@@ -23,5 +23,9 @@ build/
 # Plans / runs saved by the A* example
 10_AStarPathPlanning/output/
 
-# Maps saved by the exploration example
+# Maps saved by the exploration examples (11_01 .. 11_04)
 11_ExplorationMapping/output/
+
+# Benchmark results / logs / launcher settings of 11_ExplorationMapping
+# (force-add a results.csv or comparison_*.md to keep it: git add -f)
+11_ExplorationMapping/results/

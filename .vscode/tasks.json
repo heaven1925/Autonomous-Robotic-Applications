@@ -15,6 +15,13 @@
       "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
     },
     {
+      "label": "Robot: 11 Exploration Launcher",
+      "type": "shell",
+      "command": "powershell",
+      "args": ["-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/run.ps1", "launcher"],
+      "problemMatcher": ["$msCompile"]
+    },
+    {
       "label": "Robot: List COM ports",
       "type": "shell",
       "command": "powershell",
@@ -26,7 +33,7 @@
     {
       "id": "target",
       "type": "promptString",
-      "description": "Hedef: 1-4 (ExampleNN), 6 FollowTheGap, 7 Bug0, 8 TangentBug, 9 Mapping, 10 AStar, 11 Explore veya sample",
+      "description": "Hedef: 1-4 (ExampleNN), 6 FollowTheGap, 7 Bug0, 8 TangentBug, 9 Mapping, 10 AStar, 11 (frontier) / bfs / random / tsp, launcher veya sample",
       "default": "4"
     }
   ]

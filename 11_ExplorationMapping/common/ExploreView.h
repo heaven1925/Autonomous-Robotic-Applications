@@ -1,10 +1,13 @@
 // ExploreView.h - draws the Bayesian grid while exploring (window + PNG).
+// The same picture for every method (11_01 .. 11_04):
 //
 //   cell colour  : P(Occupied), white (0) -> grey (0.5, unknown) -> dark red (1)
 //   cell text    : P(Occupied) with two decimals
-//   cyan frame   : frontier cell, orange frame: the frontier being explored
-//   blue line    : A* path to the frontier's empty neighbour
+//   cyan frame   : frontier cell, orange frame: the current target
+//   blue line    : path to the target's empty neighbour
 //   green        : robot and its sonar beam (to the measured range)
+//   purple       : the method's own overlay (Strategy::describe): visiting
+//                  order numbers, the TSP tour, random goals ...
 #pragma once
 
 #include "BayesGrid.h"
@@ -29,6 +32,7 @@ constexpr COLORREF ColPath   = RGB(38, 98, 214);
 constexpr COLORREF ColRobot  = RGB(88, 153, 28);
 constexpr COLORREF ColBeam   = RGB(20, 140, 60);
 constexpr COLORREF ColNoEcho = RGB(170, 200, 170);
+constexpr COLORREF ColPlan   = RGB(128, 40, 170);
 
 struct ExploreScene {
     const bayes::BayesGrid* grid = nullptr;
@@ -39,6 +43,8 @@ struct ExploreScene {
     astar::Cell start;
     std::wstring title, status;
     std::vector<std::wstring> info;
+    explore::StrategyView plan;          // the method's overlay
+    const astar::GridMap* truth = nullptr;  // reference map: wrong cells get a red cross
 };
 
 inline COLORREF shade(double p) {
@@ -108,10 +114,40 @@ inline void renderExplore(Canvas& c, const ExploreScene& s) {
         const int x0 = ox + t.x * px, y0 = oy + t.y * px;
         for (int k = 2; k <= 5; ++k) c.frame(x0 + k, y0 + k, x0 + px - k + 1, y0 + px - k + 1, ColTarget);
     }
+    if (s.plan.tour.size() >= 2) {
+        std::vector<POINT> pts;
+        for (const auto& p : s.plan.tour) pts.push_back(toPx(p));
+        c.polyline(pts, ColPlan, 2);
+    }
     if (e.path().size() >= 2) {
         std::vector<POINT> pts;
         for (const auto& cell : e.path()) pts.push_back(toPx(m.centre(cell)));
         c.polyline(pts, ColPath, 3);
+    }
+    // The method's marks: a small label in the top-left corner of the cell.
+    for (const auto& mk : s.plan.marks) {
+        if (!m.inside(mk.cell)) continue;
+        const int x0 = ox + mk.cell.x * px, y0 = oy + mk.cell.y * px;
+        if (mk.kind == explore::MarkKind::Goal) {
+            c.circle(x0 + px / 2, y0 + px / 2, std::max(5, px / 6), ColPlan, 3, false);
+            continue;
+        }
+        const int w = 8 + 8 * static_cast<int>(mk.label.size());
+        const COLORREF back = mk.kind == explore::MarkKind::Order ? ColPlan : RGB(150, 110, 190);
+        c.fill(x0 + 3, y0 + 3, x0 + 3 + w, y0 + 22, back);
+        c.text(x0 + 6, y0 + 4, mk.label, RGB(255, 255, 255));
+    }
+    // Reference map known (simulator / scored run): mark cells decided WRONG.
+    if (s.truth) {
+        for (int y = 0; y < m.rows(); ++y)
+            for (int x = 0; x < m.cols(); ++x) {
+                const astar::Cell cell{ x, y };
+                const auto st = g.state(cell);
+                if (st == bayes::State::Undecided || (st == bayes::State::Occupied) == s.truth->occupied(cell)) continue;
+                const int x0 = ox + x * px, y0 = oy + y * px;
+                c.line(x0 + 6, y0 + 6, x0 + px - 6, y0 + px - 6, RGB(220, 0, 0), 3);
+                c.line(x0 + px - 6, y0 + 6, x0 + 6, y0 + px - 6, RGB(220, 0, 0), 3);
+            }
     }
 
     // Robot and beams.
@@ -154,8 +190,14 @@ inline void renderExplore(Canvas& c, const ExploreScene& s) {
     item(shade(0.5), L"undecided", false);
     item(shade(0.95), L"occupied (P > 0.8)", false);
     item(ColFront, L"frontier", true);
-    item(ColTarget, L"target frontier", true);
-    item(ColPath, L"A* path", false);
+    item(ColTarget, L"target", true);
+    item(ColPath, L"path", false);
+    if (!s.plan.tourLabel.empty()) item(ColPlan, s.plan.tourLabel.c_str(), false);
+    if (s.truth) {
+        c.line(lx + 2, ly + 5, lx + 12, ly + 15, RGB(220, 0, 0), 2);
+        c.line(lx + 12, ly + 5, lx + 2, ly + 15, RGB(220, 0, 0), 2);
+        c.text(lx + 20, ly, L"wrong vs reference", ColMuted);
+    }
 }
 
 } // namespace view

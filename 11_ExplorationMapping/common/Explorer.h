@@ -1,19 +1,24 @@
-// Explorer.h - frontier based exploration on the Bayesian grid (ders notu):
+// Explorer.h - exploration on the Bayesian grid (ders notu), the part that
+// is the SAME for every method:
 //
 //   1. Initialize grid       every cell P(Occupied) = 0.5
 //   2. Update the grid       robot cell -> empty; every sonar reading -> Bayes
 //                            update of the cells along the beam (BayesGrid.h)
-//   3. Pick a next move      frontier = undecided cell with an empty neighbour;
-//                            pick the one whose empty neighbour is closest by
-//                            A* path (only through cells known to be empty),
-//                            drive there (PathFollower.h), face the frontier
-//                            and measure it (turn around if still undecided)
-//   4. Loop                  until every cell is decided (< 0.3 or > 0.8) -
-//                            or no frontier is left (cells that can never be
-//                            seen, e.g. behind a wall, stay undecided)
+//   3. Pick a next move      >>> the Strategy (Strategy.h) <<< returns a Goal:
+//                            Measure: stand on an empty neighbour of a cell,
+//                            face it and measure it face-on (turn around if it
+//                            is still undecided); LookAround: stand on a cell
+//                            and turn 360 deg there
+//   4. Loop                  until the strategy has nothing left. Then (common)
+//                            verification: occupied cells next to free space
+//                            that were never measured face-on are re-measured
+//                            (a wrong "occupied" may hide free space).
+//
+// Driving (A* corners + PathFollower.h), the bumper handling and the time
+// limit are common as well, so the methods differ only in their decisions.
 //
 // Sensor readings are integrated only when the robot has moved / turned
-// enough (or 1 s passed) since the previous reading of the same sensor, so
+// enough (or 2 s passed) since the previous reading of the same sensor, so
 // one stationary view is not counted again and again as new evidence.
 #pragma once
 
@@ -22,6 +27,7 @@
 #include "ExploreRobot.h"
 #include "NavCommon.h"
 #include "PathFollower.h"
+#include "Strategy.h"
 
 #include <cmath>
 #include <map>
@@ -31,9 +37,6 @@
 
 namespace explore {
 
-using astar::Cell;
-using astar::Point;
-
 struct Config {
     double scanSpeed = 0.6;          // rad/s, turning on the spot to look around
     double integrateTurnDeg = 6.0;   // integrate a sensor again after this much turning...
@@ -42,16 +45,16 @@ struct Config {
     double frontStopM = 0.05;        // front reading (from the sensor) closer than this while driving: stop (a wall 1 cell ahead reads ~0.09)
     double backOffM = 0.10;
     double timeLimitS = 1500.0;
-    int maxVisits = 3;               // a frontier still undecided after this many visits is given up
+    int maxVisits = 3;               // a target still undecided after this many visits is given up
     int minDirect = 3;               // front readings taken while facing a target from its neighbour...
     int maxDirect = 12;              // ...more while they disagree with the cell's state (weak sensor model)
-    bool verify = true;              // after the frontiers: re-measure occupied cells next to free space
+    bool verify = true;              // after the strategy: re-measure occupied cells next to free space
     int maxBumps = 15;
     double planRadius = 0.15;        // robot radius for A* (cells are 0.40 m: no inflation)
 };
 
 enum class Phase { Scan, Plan, Drive, Face, Dwell, BackOff, Done };
-enum class Finish { None, AllDecided, NoFrontier, TimeLimit, TooManyBumps };
+enum class Finish { None, AllDecided, NoFrontier, Stagnated, TimeLimit, TooManyBumps };
 
 inline const char* phaseName(Phase p) {
     switch (p) {
@@ -66,10 +69,28 @@ inline const char* phaseName(Phase p) {
     return "?";
 }
 
+// Short id for files / the results table.
+inline const char* finishId(Finish f) {
+    switch (f) {
+        case Finish::AllDecided: return "all_decided";
+        case Finish::NoFrontier: return "no_frontier";
+        case Finish::Stagnated: return "stagnated";
+        case Finish::TimeLimit: return "time_limit";
+        case Finish::TooManyBumps: return "too_many_bumps";
+        case Finish::None: return "stopped";
+    }
+    return "?";
+}
+
+// The run ended by itself (not by the time limit, bumps or the user).
+inline bool finishedNormally(Finish f) {
+    return f == Finish::AllDecided || f == Finish::NoFrontier || f == Finish::Stagnated;
+}
+
 class Explorer {
 public:
-    Explorer(bayes::BayesGrid& grid, const bayes::SensorModel& model, Geometry geo, Config cfg = {})
-        : grid_(grid), model_(model), geo_(geo), cfg_(cfg) {}
+    Explorer(bayes::BayesGrid& grid, const bayes::SensorModel& model, Geometry geo, Strategy& strategy, Config cfg = {})
+        : grid_(grid), model_(model), geo_(geo), strategy_(strategy), cfg_(cfg) {}
 
     // --- 2. update the grid ---------------------------------------------
     void observe(const Snapshot& s, double now) {
@@ -102,6 +123,7 @@ public:
         nav::Command cmd;
         if (phase_ == Phase::Done) return cmd;
         if (now > cfg_.timeLimitS) return finish(Finish::TimeLimit);
+        now_ = now;
 
         const bool bumped = s.bumper != Bumper::None && lastBumper_ == Bumper::None;
         lastBumper_ = s.bumper;
@@ -131,7 +153,7 @@ public:
                     return cmd;
                 }
                 cmd = follower_.step(s.pose);
-                if (follower_.done()) phase_ = Phase::Face;
+                if (follower_.done()) arrive(s);
                 break;
             }
             case Phase::Face: {
@@ -159,7 +181,7 @@ public:
                 if ((direct_ >= cfg_.minDirect && agree_ >= 3) || direct_ >= cfg_.maxDirect || dwell_ >= 4.0) {
                     if (!contains(verified_, target_)) verified_.push_back(target_);
                     if (verifying_ || grid_.state(target_) != bayes::State::Undecided) phase_ = Phase::Plan;
-                    else startScan(s);   // frontier still undecided: look around from here
+                    else startScan(s);   // target still undecided: look around from here
                 }
                 break;
             case Phase::BackOff:
@@ -175,21 +197,28 @@ public:
         return cmd;
     }
 
-    void begin(const Snapshot& s) { startScan(s); }
+    void begin(const Snapshot& s, Cell start) {
+        start_ = start;
+        strategy_.begin(grid_, start);
+        startScan(s);
+    }
 
     // --- status ----------------------------------------------------------
     Phase phase() const { return phase_; }
     Finish finished() const { return finish_; }
     bool hasTarget() const { return hasTarget_; }
     bool verifying() const { return verifying_; }
+    Action action() const { return action_; }
     int verifiedCount() const { return static_cast<int>(verified_.size()); }
     Cell target() const { return target_; }
     Cell goal() const { return goal_; }
     const std::vector<Cell>& path() const { return path_; }
     const std::vector<Cell>& frontier() const { return frontier_; }
     const std::vector<Cell>& givenUp() const { return givenUp_; }
+    const Strategy& strategy() const { return strategy_; }
     int scans() const { return scans_; }
     int plans() const { return plans_; }
+    int goals() const { return goals_; }
     int bumps() const { return bumps_; }
     int corrections() const { return corrections_; }
     long readings() const { return readings_; }
@@ -228,6 +257,12 @@ private:
         backTime_ = 0.0;
     }
 
+    // At the end of the path: face the target (Measure) or look around (LookAround).
+    void arrive(const Snapshot& s) {
+        if (action_ == Action::LookAround) startScan(s);
+        else phase_ = Phase::Face;
+    }
+
     // One front reading while facing target_ from a neighbouring cell:
     // event "the reading lands in the target cell" -> P(hit|O) from the Gaussian
     // at the cell's distance, measured P(hit|E); otherwise the complements.
@@ -255,14 +290,16 @@ private:
         astar::GridMap planMap = grid_.planningMap();
         planMap.setOccupied(here, false);   // the robot stands here: always a valid start, whatever noise says
         const astar::CostMap cm(planMap, cfg_.planRadius, grid_.arena().walledBorder);
+        const PlanContext ctx{ grid_, cm, here, start_, frontier_, givenUp_, now_ };
 
-        // Targets: the frontier cells. When no frontier can be reached, the
-        // occupied cells next to free space that were never measured face-on
-        // (verification - a wrongly "occupied" cell may hide more free space).
-        std::vector<Cell> frontierTargets, verifyTargets;
-        for (const Cell& f : frontier_)
-            if (!isGivenUp(f)) frontierTargets.push_back(f);
-        if (cfg_.verify) {
+        // 3. The method's decision.
+        verifying_ = false;
+        std::optional<Goal> goal = strategy_.next(ctx);
+
+        // Verification (common): the strategy is done - occupied cells next to
+        // free space that were never measured face-on, nearest first.
+        if (!goal && cfg_.verify) {
+            std::vector<Cell> verifyTargets;
             for (int y = 0; y < grid_.rows(); ++y)
                 for (int x = 0; x < grid_.cols(); ++x) {
                     const Cell c{ x, y };
@@ -270,74 +307,43 @@ private:
                     for (const Cell& n : grid_.neighbours4(c))
                         if (grid_.empty(n)) { verifyTargets.push_back(c); break; }
                 }
-        }
-
-        // Closest target: the one whose empty neighbour has the shortest A* path.
-        bool found = false;
-        double best = 1e18;
-        Cell bestF{}, bestN{};
-        std::vector<Cell> bestPath;
-        const auto choose = [&](const std::vector<Cell>& targets) {
-            for (const Cell& f : targets) {
-                for (const Cell& n : grid_.neighbours4(f)) {
-                    if (!grid_.empty(n) && !(n == here)) continue;
-                    double cost = 0.0;
-                    std::vector<Cell> cells;
-                    if (n == here) {
-                        cells = { here };
-                    } else {
-                        const auto r = astar::search(cm, here, n, astar::Connectivity::Eight);
-                        if (!r.found) continue;
-                        cost = r.cost;
-                        cells = r.path;
-                    }
-                    const double tie = 0.001 * std::hypot(f.x - here.x, f.y - here.y);
-                    if (cost + tie < best) {
-                        best = cost + tie;
-                        bestF = f;
-                        bestN = n;
-                        bestPath = cells;
-                        found = true;
-                    }
-                }
+            if (const auto pick = nearestTarget(ctx, verifyTargets)) {
+                goal = Goal{ Action::Measure, pick->target, pick->approach, pick->route.cells,
+                             "verify occupied " + grid_.arena().coords.text(pick->target) + " face-on from " +
+                                 grid_.arena().coords.text(pick->approach) };
+                verifying_ = true;
             }
-        };
-        verifying_ = false;
-        choose(frontierTargets);
-        if (!found && !verifyTargets.empty()) {
-            choose(verifyTargets);
-            verifying_ = found;
         }
-        if (!found) {
-            finish(grid_.allDecided() ? Finish::AllDecided : Finish::NoFrontier);
+        if (!goal) {
+            if (grid_.allDecided()) finish(Finish::AllDecided);
+            else if (!strategy_.stopReason().empty()) { event_ = strategy_.stopReason(); finish(Finish::Stagnated); }
+            else finish(Finish::NoFrontier);
             return;
         }
 
-        if (++visits_[key(bestF)] > cfg_.maxVisits) {
-            givenUp_.push_back(bestF);
-            event_ = "cell " + grid_.arena().coords.text(bestF) + " stays undecided after " +
+        if (goal->action == Action::Measure && ++visits_[key(goal->target)] > cfg_.maxVisits) {
+            givenUp_.push_back(goal->target);
+            event_ = "cell " + grid_.arena().coords.text(goal->target) + " stays undecided after " +
                      std::to_string(cfg_.maxVisits) + " visits - giving it up";
             return;   // plan again next step
         }
-        target_ = bestF;
-        goal_ = bestN;
+        ++goals_;
+        action_ = goal->action;
+        target_ = goal->target;
+        goal_ = goal->approach;
         hasTarget_ = true;
-        path_ = bestPath;
-        if (verifying_)
-            event_ = "verify occupied " + grid_.arena().coords.text(bestF) + " face-on from " + grid_.arena().coords.text(bestN);
-        else
-            event_ = "frontier " + grid_.arena().coords.text(bestF) + " -> going to " + grid_.arena().coords.text(bestN) +
-                     " (" + std::to_string(frontier_.size()) + " frontier cells)";
+        path_ = goal->path;
+        event_ = goal->why;
 
-        if (bestPath.size() <= 1) {
-            // Already in the right cell: measure from its centre (the calibration set-up).
+        if (path_.size() <= 1) {
+            // Already in the right cell: act from its centre (the calibration set-up).
             const Point c = grid_.arena().centre(here);
-            if (std::hypot(c.x - s.pose.x, c.y - s.pose.y) < 0.03) { phase_ = Phase::Face; return; }
+            if (std::hypot(c.x - s.pose.x, c.y - s.pose.y) < 0.03) { arrive(s); return; }
             follower_.setPath({ s.pose.point(), c });
             phase_ = Phase::Drive;
             return;
         }
-        std::vector<Point> pts = astar::toPoints(grid_.arena(), astar::corners(bestPath));
+        std::vector<Point> pts = astar::toPoints(grid_.arena(), astar::corners(path_));
         pts.front() = s.pose.point();   // start where the robot really is
         follower_.setPath(pts);
         phase_ = Phase::Drive;
@@ -418,32 +424,31 @@ private:
             if (k == c) return true;
         return false;
     }
-    bool isGivenUp(Cell c) const {
-        for (const Cell& g : givenUp_)
-            if (g == c) return true;
-        return false;
-    }
+    bool isGivenUp(Cell c) const { return contains(givenUp_, c); }
     int key(Cell c) const { return c.y * 1000 + c.x; }
 
     bayes::BayesGrid& grid_;
     const bayes::SensorModel& model_;
     Geometry geo_;
+    Strategy& strategy_;
     Config cfg_;
     nav::PathFollower follower_;
 
     Phase phase_ = Phase::Scan;
     Finish finish_ = Finish::None;
+    Cell start_{};
     Cell lastRobotCell_{ -1, -1 };
     Last last_[3];
     Shown shown_[3];
-    double turned_ = 0.0, lastHeading_ = 0.0, dwell_ = 0.0, backTime_ = 0.0;
+    double now_ = 0.0, turned_ = 0.0, lastHeading_ = 0.0, dwell_ = 0.0, backTime_ = 0.0;
     nav::Pose backStart_;
     Bumper lastBumper_ = Bumper::None;
     bool hasTarget_ = false;
+    Action action_ = Action::Measure;
     Cell target_{}, goal_{};
     std::vector<Cell> path_, frontier_, givenUp_;
     std::map<int, int> visits_;
-    int scans_ = 0, plans_ = 0, bumps_ = 0, corrections_ = 0, direct_ = 0, agree_ = 0;
+    int scans_ = 0, plans_ = 0, goals_ = 0, bumps_ = 0, corrections_ = 0, direct_ = 0, agree_ = 0;
     bool verifying_ = false;
     std::vector<Cell> verified_;
     long readings_ = 0;

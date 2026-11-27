@@ -1,0 +1,19 @@
+# Engel haritasi map1 (gorsel: map1.png). Laboratuvar alani 7 sutun x 9 satir, 40 cm hucreler.
+# Koordinatlar (x, y), 0'dan: x saga, y YUKARI (alt satir y = 0, ust satir y = 8).
+# 1 = engel (kirmizi), 0 = bos (beyaz), * = baslangic (1,1), robot +y'ye bakar.
+# Ic engel yok: yalniz dis duvarlar.
+# Simulatorde gercek dunya; gercek robotta cikan haritanin karsilastirildigi referans.
+name map1
+cell 0.40
+coords x-y 0
+border wall
+heading 90
+1 1 1 1 1 1 1
+1 0 0 0 0 0 1
+1 0 0 0 0 0 1
+1 0 0 0 0 0 1
+1 0 0 0 0 0 1
+1 0 0 0 0 0 1
+1 0 0 0 0 0 1
+1 * 0 0 0 0 1
+1 1 1 1 1 1 1
